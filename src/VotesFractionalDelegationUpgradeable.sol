@@ -2,7 +2,7 @@
 // OpenZeppelin Contracts (last updated v5.0.0) (governance/utils/Votes.sol)
 pragma solidity ^0.8.20;
 
-import {IERC5805} from "@openzeppelin/contracts/interfaces/IERC5805.sol";
+import {IERC5805Modified} from "src/IERC5805Modified.sol";
 import {ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import {NoncesUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/NoncesUpgradeable.sol";
 import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
@@ -34,10 +34,9 @@ abstract contract VotesFractionalDelegationUpgradeable is
   Initializable,
   ContextUpgradeable,
   EIP712Upgradeable,
-  NoncesUpgradeable
+  NoncesUpgradeable,
+  IERC5805Modified
 {
-  //   IERC5805
-
   using Checkpoints for Checkpoints.Trace208;
 
   bytes32 private constant FRACTIONAL_DELEGATION_TYPEHASH =
@@ -178,17 +177,16 @@ abstract contract VotesFractionalDelegationUpgradeable is
   /**
    * @dev Delegates votes from the sender to `delegatee`.
    */
-  function delegate(FractionalDelegation[] calldata _delegatees) public virtual {
+  function delegate(FractionalDelegation[] calldata _fractionalDelegations) public virtual {
     address account = _msgSender();
-    _delegate(account, _delegatees);
+    _delegate(account, _fractionalDelegations);
   }
 
   /**
    * @dev Delegates votes from signer to `delegatee`.
    */
-  // @audit will have to change, or else be overloaded
   function delegateBySig(
-    FractionalDelegation[] calldata fractionalDelegations,
+    FractionalDelegation[] memory _fractionalDelegations,
     uint256 nonce,
     uint256 expiry,
     uint8 v,
@@ -199,13 +197,13 @@ abstract contract VotesFractionalDelegationUpgradeable is
       revert VotesExpiredSignature(expiry);
     }
     address signer = ECDSA.recover(
-      _hashTypedDataV4(keccak256(abi.encode(FRACTIONAL_DELEGATION_TYPEHASH, fractionalDelegations, nonce, expiry))),
+      _hashTypedDataV4(keccak256(abi.encode(FRACTIONAL_DELEGATION_TYPEHASH, _fractionalDelegations, nonce, expiry))),
       v,
       r,
       s
     );
     _useCheckedNonce(signer, nonce);
-    _delegate(signer, fractionalDelegations);
+    _delegate(signer, _fractionalDelegations);
   }
 
   /**
@@ -213,36 +211,54 @@ abstract contract VotesFractionalDelegationUpgradeable is
    *
    * Emits events {IVotes-DelegateChanged} and {IVotes-DelegateVotesChanged}.
    */
-  function _delegate(address account, FractionalDelegation[] calldata fractionalDelegations) internal virtual {
+  function _delegate(address _account, FractionalDelegation[] memory _fractionalDelegations) internal virtual {
     VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
-    FractionalDelegation[] memory oldDelegations = delegates(account);
+    FractionalDelegation[] memory _oldDelegations = delegates(_account);
+    DelegationAdjustment[] memory _old = _calculateWeightDistribution(_oldDelegations, _getVotingUnits(_account), false);
+    DelegationAdjustment[] memory _new =
+      _calculateWeightDistribution(_fractionalDelegations, _getVotingUnits(_account), true);
+    // (optional) prune and sum _old and _new
+    _adjustDelegateVotes(_old);
+    _adjustDelegateVotes(_new);
 
-    // TODO: subtract weight from existing places and move to new places
-    // must know both old weights and new weights
-    uint256[] memory _old = _calculateVotingProportions(oldDelegations, _getVotingUnits(account));
+    // All this code is to update the new delegatees
+    uint256 _oldDelegateLength = _oldDelegations.length;
+    for (uint256 i = 0; i < _fractionalDelegations.length; i++) {
+      if (i < _oldDelegateLength) {
+        $._delegatees[_account][i] = _fractionalDelegations[i];
+      } else {
+        $._delegatees[_account].push(_fractionalDelegations[i]);
+      }
+      if (i == _oldDelegateLength) {
+        $._delegatees[_account].pop();
+      }
+    }
+    if (_oldDelegateLength > _fractionalDelegations.length) {
+      for (uint256 i = _fractionalDelegations.length; i < _oldDelegateLength; i++) {
+        $._delegatees[_account].pop();
+      }
+    }
 
-    // take the old weight
-    // _adjustDelegateVotes(account, delegatee, _getVotingUnits(account));
-    $._delegatees[account] = fractionalDelegations;
-    // emit DelegateChanged(account, oldDelegate, delegatee);
+    // TODO: emit event
+    // emit DelegateChanged(_account, oldDelegate, delegatee);
   }
 
-  // TODO: prune zero adjustments, and sum all adjustments per delegate
-  function _createDelegationAdjustments(FractionalDelegation[] memory _old, FractionalDelegation[] memory _new)
-    internal
-    returns (DelegationAdjustment[] memory)
-  {
-    DelegationAdjustment[] memory _delegationAdjustments = new DelegationAdjustment[](_old.length + _new.length);
-    for (uint256 i = 0; i < _old.length; i++) {
-      _delegationAdjustments[i] =
-        DelegationAdjustment({_delegatee: _old[i]._delegatee, _amount: _old[i]._numerator, _isAddition: false});
-    }
-    for (uint256 i = 0; i < _new.length; i++) {
-      _delegationAdjustments[i + _old.length] =
-        DelegationAdjustment({_delegatee: _new[i]._delegatee, _amount: _new[i]._numerator, _isAddition: true});
-    }
-    return _delegationAdjustments;
-  }
+  //   // TODO: prune zero adjustments, and sum all adjustments per delegate
+  //   function _createDelegationAdjustments(FractionalDelegation[] memory _old, FractionalDelegation[] memory _new)
+  //     internal
+  //     returns (DelegationAdjustment[] memory)
+  //   {
+  //     DelegationAdjustment[] memory _delegationAdjustments = new DelegationAdjustment[](_old.length + _new.length);
+  //     for (uint256 i = 0; i < _old.length; i++) {
+  //       _delegationAdjustments[i] =
+  //         DelegationAdjustment({_delegatee: _old[i]._delegatee, _amount: _old[i]._numerator, _isAddition: false});
+  //     }
+  //     for (uint256 i = 0; i < _new.length; i++) {
+  //       _delegationAdjustments[i + _old.length] =
+  //         DelegationAdjustment({_delegatee: _new[i]._delegatee, _amount: _new[i]._numerator, _isAddition: true});
+  //     }
+  //     return _delegationAdjustments;
+  //   }
 
   /**
    * @dev Transfers, mints, or burns voting units. To register a mint, `from` should be zero. To register a burn, `to`
@@ -256,6 +272,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
     if (to == address(0)) {
       _push($._totalCheckpoints, _subtract, SafeCast.toUint208(amount));
     }
+    // This case is more complicated than a delegation.
     DelegationAdjustment[] memory _delegationAdjustments = _calculateDelegateVoteAdjustments(from, to, amount);
     _adjustDelegateVotes(_delegationAdjustments);
   }
@@ -266,13 +283,17 @@ abstract contract VotesFractionalDelegationUpgradeable is
     returns (DelegationAdjustment[] memory)
   {
     VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+
     // get old weights
-    uint256[] memory _from = _calculateVotingProportions($._delegatees[from], _getVotingUnits(from));
-    uint256[] memory _to = _calculateVotingProportions($._delegatees[to], _getVotingUnits(to));
+    DelegationAdjustment[] memory _from =
+      _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from), false);
+    DelegationAdjustment[] memory _to = _calculateWeightDistribution($._delegatees[to], _getVotingUnits(to), false);
 
     // calculate new weights
-    uint256[] memory _fromNew = _calculateVotingProportions($._delegatees[from], _getVotingUnits(from) - amount);
-    uint256[] memory _toNew = _calculateVotingProportions($._delegatees[to], amount);
+    DelegationAdjustment[] memory _fromNew =
+      _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from) - amount, true);
+    DelegationAdjustment[] memory _toNew =
+      _calculateWeightDistribution($._delegatees[to], amount + _getVotingUnits(to), true);
 
     // calculate adjustments
     // TODO: prune zero adjustments, sum all adjustments per delegate
@@ -280,14 +301,14 @@ abstract contract VotesFractionalDelegationUpgradeable is
     for (uint256 i = 0; i < _from.length; i++) {
       _delegationAdjustments[i] = DelegationAdjustment({
         _delegatee: $._delegatees[from][i]._delegatee,
-        _amount: _from[i] - _fromNew[i],
+        _amount: _from[i]._amount - _fromNew[i]._amount,
         _isAddition: false
       });
     }
     for (uint256 i = 0; i < _to.length; i++) {
       _delegationAdjustments[i + _from.length] = DelegationAdjustment({
         _delegatee: $._delegatees[to][i]._delegatee,
-        _amount: _toNew[i] - _to[i],
+        _amount: _toNew[i]._amount - _to[i]._amount,
         _isAddition: true
       });
     }
@@ -297,7 +318,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
   /// @dev _delegationAdjustments array should already be totaled and pruned.
   /// totaled: all additions and subtractions should be summed per delegate
   /// pruned: all zero adjustments should be removed
-  function _adjustDelegateVotes(DelegationAdjustment[] calldata _delegationAdjustments) internal {
+  function _adjustDelegateVotes(DelegationAdjustment[] memory _delegationAdjustments) internal {
     VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
     for (uint256 i = 0; i < _delegationAdjustments.length; i++) {
       function(uint208, uint208) view returns (uint208) _op = _delegationAdjustments[i]._isAddition ? _add : _subtract;
@@ -306,20 +327,29 @@ abstract contract VotesFractionalDelegationUpgradeable is
         _op,
         SafeCast.toUint208(_delegationAdjustments[i]._amount)
       );
-      emit DelegateVotesChanged(_delegationAdjustments[i]._delegatee, oldValue, newValue);
+      // TODO: emit event
+      // emit DelegateVotesChanged(_delegationAdjustments[i]._delegatee, oldValue, newValue);
     }
   }
 
-  function _calculateVotingProportions(FractionalDelegation[] memory _delegations, uint256 amount)
+  function _calculateWeightDistribution(FractionalDelegation[] memory _delegations, uint256 _amount, bool _isAddition)
     internal
     pure
-    returns (uint256[] memory)
+    returns (DelegationAdjustment[] memory)
   {
-    uint256[] memory votingProportions = new uint256[](_delegations.length);
+    DelegationAdjustment[] memory _delegationAdjustments = new DelegationAdjustment[](_delegations.length);
+    uint256 _total = 0;
     for (uint256 i = 0; i < _delegations.length; i++) {
-      votingProportions[i] = amount * _delegations[i]._numerator / DENOMINATOR;
+      _delegationAdjustments[i] = DelegationAdjustment(
+        _delegations[i]._delegatee, uint208(_amount) * _delegations[i]._numerator / DENOMINATOR, _isAddition
+      );
+      _total += _delegationAdjustments[i]._amount;
     }
-    return votingProportions;
+    // assign remaining weight to first delegatee
+    if (_total < _amount) {
+      _delegationAdjustments[0]._amount += uint208(_amount - _total);
+    }
+    return _delegationAdjustments;
   }
 
   /**
