@@ -2,9 +2,14 @@
 // OpenZeppelin Contracts (last updated v5.0.0) (governance/utils/IVotes.sol)
 pragma solidity ^0.8.20;
 
+struct PartialDelegation {
+  address _delegatee;
+  uint8 _numerator;
+}
 /**
  * @dev Common interface for {ERC20VotesPartialDelegation} and other {VotesPartialDelegation}-enabled contracts.
  */
+
 interface IVotesPartialDelegation {
   /**
    * @dev The signature used has expired.

@@ -9,7 +9,7 @@ import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /**
- * @dev ERC20VotesUpgradeable except with fractional delegation via VotesPartialDelegationUpgradeable.
+ * @dev ERC20VotesUpgradeable except with partial delegation via VotesPartialDelegationUpgradeable.
  * From ERC20VotesUpgradeable:
  * Extension of ERC20 to support Compound-like voting and delegation. This version is more generic than Compound's,
  * and supports token supply up to 2^208^ - 1, while COMP is limited to 2^96^ - 1.
