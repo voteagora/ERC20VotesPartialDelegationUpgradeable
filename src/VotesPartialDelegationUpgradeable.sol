@@ -211,7 +211,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     }
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     // (optional) prune and sum _old and _new
-
     PartialDelegation[] memory _oldDelegations = delegates(_account);
     if (_oldDelegations.length > 0) {
       DelegationAdjustment[] memory _old =
@@ -221,6 +220,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
     DelegationAdjustment[] memory _new =
       _calculateWeightDistribution(_partialDelegations, _getVotingUnits(_account), true);
+    console2.log("heyyY");
     _adjustDelegateVotes(_new);
 
     // All this code is to update the new delegatees
@@ -347,22 +347,24 @@ abstract contract VotesPartialDelegationUpgradeable is
     returns (DelegationAdjustment[] memory)
   {
     DelegationAdjustment[] memory _delegationAdjustments = new DelegationAdjustment[](_delegations.length);
-    uint256 _total = 0;
-    console2.log("hey");
-    console2.log(_delegations.length);
+    uint256 _totalVotes = 0;
+    // TODO: include numerator counter only if we change type/denominator
+    // uint256 _totalNumerator = 0;
     for (uint256 i = 0; i < _delegations.length; i++) {
-      console2.log("whoa");
       _delegationAdjustments[i] = DelegationAdjustment(
-        _delegations[i]._delegatee, uint208(_amount) * _delegations[i]._numerator / DENOMINATOR, _isAddition
+        _delegations[i]._delegatee, uint208(_amount * _delegations[i]._numerator / DENOMINATOR), _isAddition
       );
-      _total += _delegationAdjustments[i]._amount;
+      // _totalNumerator += _delegations[i]._numerator;
+      _totalVotes += _delegationAdjustments[i]._amount;
     }
-    // assign remaining weight to first delegatee
-    // TODO: change to last
-    if (_total < _amount && _amount != 0) {
-      _delegationAdjustments[0]._amount += uint208(_amount - _total);
+    // assign remaining weight to last delegatee
+    if (_totalVotes < _amount && _amount != 0) {
+      _delegationAdjustments[_delegations.length - 1]._amount += uint208(_amount - _totalVotes);
     }
-    console2.log("done");
+    // TODO: include this if we change the type/denominator
+    // if (_totalNumerator > DENOMINATOR) {
+    //   revert("VotesPartialDelegation: delegation numerators sum to more than DENOMINATOR");
+    // }
     return _delegationAdjustments;
   }
 
