@@ -3,7 +3,7 @@
 
 pragma solidity ^0.8.20;
 
-import {IVotesFractionalDelegation} from "src/IVotesFractionalDelegation.sol";
+import {IVotesPartialDelegation} from "src/IVotesPartialDelegation.sol";
 import {IERC6372} from "@openzeppelin/contracts/interfaces/IERC6372.sol";
 
-interface IERC5805Modified is IERC6372, IVotesFractionalDelegation {}
+interface IERC5805Modified is IERC6372, IVotesPartialDelegation {}

@@ -30,7 +30,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
  * {ERC721-balanceOf}), and can use {_transferVotingUnits} to track a change in the distribution of those units (in the
  * previous example, it would be included in {ERC721-_update}).
  */
-abstract contract VotesFractionalDelegationUpgradeable is
+abstract contract VotesPartialDelegationUpgradeable is
   Initializable,
   ContextUpgradeable,
   EIP712Upgradeable,
@@ -39,12 +39,12 @@ abstract contract VotesFractionalDelegationUpgradeable is
 {
   using Checkpoints for Checkpoints.Trace208;
 
-  bytes32 private constant FRACTIONAL_DELEGATION_TYPEHASH =
-    keccak256("FractionalDelegation(FractionalDelegation[] delegations,uint256 nonce,uint256 expiry)");
-  uint256 constant MAX_FRACTIONAL_DELEGATIONS = 10;
-  uint8 constant DENOMINATOR = 255;
+  bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
+    keccak256("PartialDelegation(PartialDelegation[] delegations,uint256 nonce,uint256 expiry)");
+  uint256 public constant MAX_PARTIAL_DELEGATIONS = 10;
+  uint8 public constant DENOMINATOR = 255;
 
-  struct FractionalDelegation {
+  struct PartialDelegation {
     address _delegatee;
     uint8 _numerator;
   }
@@ -56,20 +56,20 @@ abstract contract VotesFractionalDelegationUpgradeable is
   }
 
   /// @custom:storage-location erc7201:openzeppelin.storage.Votes
-  struct VotesFractionalDelegationStorage {
-    mapping(address account => FractionalDelegation[]) _delegatees;
+  struct VotesPartialDelegationStorage {
+    mapping(address account => PartialDelegation[]) _delegatees;
     mapping(address delegatee => Checkpoints.Trace208) _delegateCheckpoints;
     Checkpoints.Trace208 _totalCheckpoints;
   }
 
-  // keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.VotesFractionalDelegation")) - 1)) &
-  // ~bytes32(uint256(0xff))
-  bytes32 private constant VotesFractionalDelegationStorageLocation =
-    0x50e95a9f47aa972f88438aa6b410b8e63f6c302a5e5a609a3e35a277ef79ed00;
+  // keccak256(abi.encode(uint256(keccak256("openzeppelin.storage.VotesPartialDelegation")) - 1))
+  // &~bytes32(uint256(0xff))
+  bytes32 private constant VotesPartialDelegationStorageLocation =
+    0x12a728d6ef7084b9d775fe05520ff4e00000bc23996fe81cefc12739f2cd9000;
 
-  function _getVotesFractionalDelegationStorage() private pure returns (VotesFractionalDelegationStorage storage $) {
+  function _getVotesPartialDelegationStorage() private pure returns (VotesPartialDelegationStorage storage $) {
     assembly {
-      $.slot := VotesFractionalDelegationStorageLocation
+      $.slot := VotesPartialDelegationStorageLocation
     }
   }
 
@@ -83,9 +83,9 @@ abstract contract VotesFractionalDelegationUpgradeable is
    */
   error ERC5805FutureLookup(uint256 timepoint, uint48 clock);
 
-  function __VotesFractionalDelegation_init() internal onlyInitializing {}
+  function __VotesPartialDelegation_init() internal onlyInitializing {}
 
-  function __VotesFractionalDelegation_init_unchained() internal onlyInitializing {}
+  function __VotesPartialDelegation_init_unchained() internal onlyInitializing {}
   /**
    * @dev Clock used for flagging checkpoints. Can be overridden to implement timestamp based
    * checkpoints (and voting), in which case {CLOCK_MODE} should be overridden as well to match.
@@ -111,7 +111,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
    * @dev Returns the current amount of votes that `account` has.
    */
   function getVotes(address account) public view virtual returns (uint256) {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     return $._delegateCheckpoints[account].latest();
   }
 
@@ -124,7 +124,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
    * - `timepoint` must be in the past. If operating using block numbers, the block must be already mined.
    */
   function getPastVotes(address account, uint256 timepoint) public view virtual returns (uint256) {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     uint48 currentTimepoint = clock();
     if (timepoint >= currentTimepoint) {
       revert ERC5805FutureLookup(timepoint, currentTimepoint);
@@ -145,7 +145,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
    * - `timepoint` must be in the past. If operating using block numbers, the block must be already mined.
    */
   function getPastTotalSupply(uint256 timepoint) public view virtual returns (uint256) {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     uint48 currentTimepoint = clock();
     if (timepoint >= currentTimepoint) {
       revert ERC5805FutureLookup(timepoint, currentTimepoint);
@@ -157,15 +157,15 @@ abstract contract VotesFractionalDelegationUpgradeable is
    * @dev Returns the current total supply of votes.
    */
   function _getTotalSupply() internal view virtual returns (uint256) {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     return $._totalCheckpoints.latest();
   }
 
   /**
    * @dev Returns the delegate that `account` has chosen.
    */
-  function delegates(address account) public view virtual returns (FractionalDelegation[] memory) {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+  function delegates(address account) public view virtual returns (PartialDelegation[] memory) {
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     return $._delegatees[account];
   }
 
@@ -175,18 +175,18 @@ abstract contract VotesFractionalDelegationUpgradeable is
   //   }
 
   /**
-   * @dev Delegates votes from the sender to `delegatee`.
+   * @dev Delegates votes from the sender to each `PartialDelegation._delegatee`.
    */
-  function delegate(FractionalDelegation[] calldata _fractionalDelegations) public virtual {
+  function delegate(PartialDelegation[] calldata _partialDelegations) public virtual {
     address account = _msgSender();
-    _delegate(account, _fractionalDelegations);
+    _delegate(account, _partialDelegations);
   }
 
   /**
    * @dev Delegates votes from signer to `delegatee`.
    */
   function delegateBySig(
-    FractionalDelegation[] memory _fractionalDelegations,
+    PartialDelegation[] memory _partialDelegations,
     uint256 nonce,
     uint256 expiry,
     uint8 v,
@@ -197,44 +197,44 @@ abstract contract VotesFractionalDelegationUpgradeable is
       revert VotesExpiredSignature(expiry);
     }
     address signer = ECDSA.recover(
-      _hashTypedDataV4(keccak256(abi.encode(FRACTIONAL_DELEGATION_TYPEHASH, _fractionalDelegations, nonce, expiry))),
-      v,
-      r,
-      s
+      _hashTypedDataV4(keccak256(abi.encode(PARTIAL_DELEGATION_TYPEHASH, _partialDelegations, nonce, expiry))), v, r, s
     );
     _useCheckedNonce(signer, nonce);
-    _delegate(signer, _fractionalDelegations);
+    _delegate(signer, _partialDelegations);
   }
 
   /**
-   * @dev Delegate all of `account`'s voting units to delegates specified in `fractionalDelegations`.
+   * @dev Delegate all of `account`'s voting units to delegates specified in `PartialDelegations`.
    *
    * Emits events {IVotes-DelegateChanged} and {IVotes-DelegateVotesChanged}.
    */
-  function _delegate(address _account, FractionalDelegation[] memory _fractionalDelegations) internal virtual {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
-    FractionalDelegation[] memory _oldDelegations = delegates(_account);
+  function _delegate(address _account, PartialDelegation[] memory _partialDelegations) internal virtual {
+    if (_partialDelegations.length > MAX_PARTIAL_DELEGATIONS) {
+      revert("VotesPartialDelegation: too many partial delegations");
+    }
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
+    PartialDelegation[] memory _oldDelegations = delegates(_account);
     DelegationAdjustment[] memory _old = _calculateWeightDistribution(_oldDelegations, _getVotingUnits(_account), false);
     DelegationAdjustment[] memory _new =
-      _calculateWeightDistribution(_fractionalDelegations, _getVotingUnits(_account), true);
+      _calculateWeightDistribution(_partialDelegations, _getVotingUnits(_account), true);
     // (optional) prune and sum _old and _new
     _adjustDelegateVotes(_old);
     _adjustDelegateVotes(_new);
 
     // All this code is to update the new delegatees
     uint256 _oldDelegateLength = _oldDelegations.length;
-    for (uint256 i = 0; i < _fractionalDelegations.length; i++) {
+    for (uint256 i = 0; i < _partialDelegations.length; i++) {
       if (i < _oldDelegateLength) {
-        $._delegatees[_account][i] = _fractionalDelegations[i];
+        $._delegatees[_account][i] = _partialDelegations[i];
       } else {
-        $._delegatees[_account].push(_fractionalDelegations[i]);
+        $._delegatees[_account].push(_partialDelegations[i]);
       }
       if (i == _oldDelegateLength) {
         $._delegatees[_account].pop();
       }
     }
-    if (_oldDelegateLength > _fractionalDelegations.length) {
-      for (uint256 i = _fractionalDelegations.length; i < _oldDelegateLength; i++) {
+    if (_oldDelegateLength > _partialDelegations.length) {
+      for (uint256 i = _partialDelegations.length; i < _oldDelegateLength; i++) {
         $._delegatees[_account].pop();
       }
     }
@@ -244,7 +244,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
   }
 
   //   // TODO: prune zero adjustments, and sum all adjustments per delegate
-  //   function _createDelegationAdjustments(FractionalDelegation[] memory _old, FractionalDelegation[] memory _new)
+  //   function _createDelegationAdjustments(PartialDelegation[] memory _old, PartialDelegation[] memory _new)
   //     internal
   //     returns (DelegationAdjustment[] memory)
   //   {
@@ -265,7 +265,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
    * should be zero. Total supply of voting units will be adjusted with mints and burns.
    */
   function _transferVotingUnits(address from, address to, uint256 amount) internal virtual {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     if (from == address(0)) {
       _push($._totalCheckpoints, _add, SafeCast.toUint208(amount));
     }
@@ -282,8 +282,9 @@ abstract contract VotesFractionalDelegationUpgradeable is
     virtual
     returns (DelegationAdjustment[] memory)
   {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
 
+    // TODO: maybe don't overload this DelegationAdjustment array (we're not using the add/subtract flags)
     // get old weights
     DelegationAdjustment[] memory _from =
       _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from), false);
@@ -319,7 +320,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
   /// totaled: all additions and subtractions should be summed per delegate
   /// pruned: all zero adjustments should be removed
   function _adjustDelegateVotes(DelegationAdjustment[] memory _delegationAdjustments) internal {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     for (uint256 i = 0; i < _delegationAdjustments.length; i++) {
       function(uint208, uint208) view returns (uint208) _op = _delegationAdjustments[i]._isAddition ? _add : _subtract;
       (uint256 oldValue, uint256 newValue) = _push(
@@ -332,7 +333,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
     }
   }
 
-  function _calculateWeightDistribution(FractionalDelegation[] memory _delegations, uint256 _amount, bool _isAddition)
+  function _calculateWeightDistribution(PartialDelegation[] memory _delegations, uint256 _amount, bool _isAddition)
     internal
     pure
     returns (DelegationAdjustment[] memory)
@@ -346,6 +347,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
       _total += _delegationAdjustments[i]._amount;
     }
     // assign remaining weight to first delegatee
+    // TODO: change to last
     if (_total < _amount) {
       _delegationAdjustments[0]._amount += uint208(_amount - _total);
     }
@@ -356,7 +358,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
    * @dev Get number of checkpoints for `account`.
    */
   function _numCheckpoints(address account) internal view virtual returns (uint32) {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     return SafeCast.toUint32($._delegateCheckpoints[account].length());
   }
 
@@ -364,7 +366,7 @@ abstract contract VotesFractionalDelegationUpgradeable is
    * @dev Get the `pos`-th checkpoint for `account`.
    */
   function _checkpoints(address account, uint32 pos) internal view virtual returns (Checkpoints.Checkpoint208 memory) {
-    VotesFractionalDelegationStorage storage $ = _getVotesFractionalDelegationStorage();
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     return $._delegateCheckpoints[account].at(pos);
   }
 

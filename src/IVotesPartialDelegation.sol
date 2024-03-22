@@ -3,9 +3,9 @@
 pragma solidity ^0.8.20;
 
 /**
- * @dev Common interface for {ERC20VotesFractionalDelegation} and other {VotesFractionalDelegation}-enabled contracts.
+ * @dev Common interface for {ERC20VotesPartialDelegation} and other {VotesPartialDelegation}-enabled contracts.
  */
-interface IVotesFractionalDelegation {
+interface IVotesPartialDelegation {
   /**
    * @dev The signature used has expired.
    */

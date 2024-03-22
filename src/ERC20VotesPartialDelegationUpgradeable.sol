@@ -4,12 +4,12 @@
 pragma solidity ^0.8.20;
 
 import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import {VotesFractionalDelegationUpgradeable} from "src/VotesFractionalDelegationUpgradeable.sol";
+import {VotesPartialDelegationUpgradeable} from "src/VotesPartialDelegationUpgradeable.sol";
 import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /**
- * @dev ERC20VotesUpgradeable except with fractional delegation via VotesFractionalDelegationUpgradeable.
+ * @dev ERC20VotesUpgradeable except with fractional delegation via VotesPartialDelegationUpgradeable.
  * From ERC20VotesUpgradeable:
  * Extension of ERC20 to support Compound-like voting and delegation. This version is more generic than Compound's,
  * and supports token supply up to 2^208^ - 1, while COMP is limited to 2^96^ - 1.
@@ -23,19 +23,19 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
  * By default, token balance does not account for voting power. This makes transfers cheaper. The downside is that it
  * requires users to delegate to themselves in order to activate checkpoints and have their voting power tracked.
  */
-abstract contract ERC20VotesFractionalDelegationUpgradeable is
+abstract contract ERC20VotesPartialDelegationUpgradeable is
   Initializable,
   ERC20Upgradeable,
-  VotesFractionalDelegationUpgradeable
+  VotesPartialDelegationUpgradeable
 {
   /**
    * @dev Total supply cap has been exceeded, introducing a risk of votes overflowing.
    */
   error ERC20ExceededSafeSupply(uint256 increasedSupply, uint256 cap);
 
-  function __ERC20VotesFractionalDelegation_init() internal onlyInitializing {}
+  function __ERC20VotesPartialDelegation_init() internal onlyInitializing {}
 
-  function __ERC20VotesFractionalDelegation_init_unchained() internal onlyInitializing {}
+  function __ERC20VotesPartialDelegation_init_unchained() internal onlyInitializing {}
   /**
    * @dev Maximum token supply. Defaults to `type(uint208).max` (2^208^ - 1).
    *
