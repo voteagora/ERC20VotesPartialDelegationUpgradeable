@@ -220,7 +220,6 @@ abstract contract VotesPartialDelegationUpgradeable is
 
     DelegationAdjustment[] memory _new =
       _calculateWeightDistribution(_partialDelegations, _getVotingUnits(_account), true);
-    console2.log("heyyY");
     _adjustDelegateVotes(_new);
 
     // All this code is to update the new delegatees
@@ -328,7 +327,6 @@ abstract contract VotesPartialDelegationUpgradeable is
   /// pruned: all zero adjustments should be removed
   function _adjustDelegateVotes(DelegationAdjustment[] memory _delegationAdjustments) internal {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    console2.log("here we are, arent we");
     for (uint256 i = 0; i < _delegationAdjustments.length; i++) {
       function(uint208, uint208) view returns (uint208) _op = _delegationAdjustments[i]._isAddition ? _add : _subtract;
       (uint256 oldValue, uint256 newValue) = _push(

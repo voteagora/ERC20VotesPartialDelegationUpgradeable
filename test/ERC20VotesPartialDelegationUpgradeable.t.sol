@@ -86,6 +86,38 @@ contract Delegate is PartialDelegationTest {
     assertEq(tokenProxy.getVotes(_delegatee1) + tokenProxy.getVotes(_delegatee2), _amount);
   }
 
+  function testFuzz_DelegatesToTwoAddressesWithNumeratorsSummingToLessThan100(
+    address _actor,
+    address _delegatee1,
+    address _delegatee2,
+    uint256 _amount,
+    uint8 _numerator1,
+    uint8 _numerator2
+  ) public {
+    vm.assume(_actor != address(0));
+    vm.assume(_delegatee1 != address(0));
+    vm.assume(_delegatee2 != address(0));
+    vm.assume(_delegatee1 != _delegatee2);
+    _amount = bound(_amount, 0, type(uint208).max);
+    _numerator1 = uint8(bound(_numerator1, 1, tokenProxy.DENOMINATOR() - 2));
+    // numerator1 + numerator2 < 100
+    _numerator2 = uint8(bound(_numerator2, 1, tokenProxy.DENOMINATOR() - _numerator1 - 1));
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    PartialDelegation[] memory delegations = new PartialDelegation[](2);
+    delegations[0] = PartialDelegation(_delegatee1, _numerator1);
+    delegations[1] = PartialDelegation(_delegatee2, _numerator2);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+    assertEq(tokenProxy.delegates(_actor), delegations);
+    assertEq(tokenProxy.getVotes(_delegatee1), _amount * _numerator1 / tokenProxy.DENOMINATOR());
+    assertEq(tokenProxy.getVotes(_delegatee2), _amount - tokenProxy.getVotes(_delegatee1));
+    assertApproxEqAbs(
+      tokenProxy.getVotes(_delegatee2), _amount * (tokenProxy.DENOMINATOR() - _numerator1) / tokenProxy.DENOMINATOR(), 1
+    );
+    assertEq(tokenProxy.getVotes(_delegatee1) + tokenProxy.getVotes(_delegatee2), _amount);
+  }
+
   // TODO: include this test if we change to a different type/denominator pair for _numerator
   // function testFuzz_RevertIf_DelegationNumeratorTooLarge(
   //   address _actor,
