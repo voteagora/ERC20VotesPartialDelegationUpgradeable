@@ -4,10 +4,13 @@ pragma solidity 0.8.24;
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlDefaultAdminRulesUpgradeable} from
   "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
-import {ERC20VotesUpgradeable} from
-  "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
+import {ERC20VotesPartialDelegationUpgradeable} from "src/ERC20VotesPartialDelegationUpgradeable.sol";
 
-contract LyraGovToken is UUPSUpgradeable, AccessControlDefaultAdminRulesUpgradeable, ERC20VotesUpgradeable {
+contract LyraGovToken is
+  UUPSUpgradeable,
+  AccessControlDefaultAdminRulesUpgradeable,
+  ERC20VotesPartialDelegationUpgradeable
+{
   bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
   bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
 
