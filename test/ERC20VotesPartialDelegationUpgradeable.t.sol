@@ -116,6 +116,7 @@ contract Delegate is PartialDelegationTest {
       tokenProxy.getVotes(_delegatee2), _amount * (tokenProxy.DENOMINATOR() - _numerator1) / tokenProxy.DENOMINATOR(), 1
     );
     assertEq(tokenProxy.getVotes(_delegatee1) + tokenProxy.getVotes(_delegatee2), _amount);
+    assertEq(tokenProxy.balanceOf(_actor), _amount);
   }
 
   function testFuzz_RevertIf_DelegationArrayIncludesDuplicates(
@@ -185,6 +186,8 @@ contract Delegate is PartialDelegationTest {
   // }
 }
 
+contract DelegateBySig is PartialDelegationTest {}
+
 contract Transfer is PartialDelegationTest {
   function testFuzz_MovesVotesFromOneDelegateeSetToAnother(
     address _actor,
@@ -201,7 +204,7 @@ contract Transfer is PartialDelegationTest {
     vm.skip(true);
   }
 
-  function testFuzz_RemovesVoteBalanceWhenReceiverHasNotDelegated() public {
+  function testFuzz_RemovesVotesWhenReceiverHasNotDelegated() public {
     vm.skip(true);
   }
 
