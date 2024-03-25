@@ -118,6 +118,52 @@ contract Delegate is PartialDelegationTest {
     assertEq(tokenProxy.getVotes(_delegatee1) + tokenProxy.getVotes(_delegatee2), _amount);
   }
 
+  function testFuzz_RevertIf_DelegationArrayIncludesDuplicates(
+    address _actor,
+    address _delegatee,
+    uint256 _amount,
+    uint8 _numerator
+  ) public {
+    vm.skip(true);
+    vm.assume(_actor != address(0));
+    vm.assume(_delegatee != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _numerator = uint8(bound(_numerator, 1, tokenProxy.DENOMINATOR() - 1));
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    PartialDelegation[] memory delegations = new PartialDelegation[](2);
+    delegations[0] = PartialDelegation(_delegatee, _numerator);
+    delegations[1] = PartialDelegation(_delegatee, tokenProxy.DENOMINATOR() - _numerator);
+    vm.expectRevert();
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_RevertIf_DelegationArrayNumeratorsSumToGreaterThanDenominator(
+    address _actor,
+    address _delegatee1,
+    address _delegatee2,
+    uint256 _amount,
+    uint8 _numerator1,
+    uint8 _numerator2
+  ) public {
+    vm.assume(_actor != address(0));
+    vm.assume(_delegatee1 != address(0));
+    vm.assume(_delegatee2 != address(0));
+    vm.assume(_delegatee1 != _delegatee2);
+    _amount = bound(_amount, 0, type(uint208).max);
+    _numerator1 = uint8(bound(_numerator1, 1, tokenProxy.DENOMINATOR()));
+    _numerator2 = tokenProxy.DENOMINATOR() - _numerator1 + 1;
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    PartialDelegation[] memory delegations = new PartialDelegation[](2);
+    delegations[0] = PartialDelegation(_delegatee1, _numerator1);
+    delegations[1] = PartialDelegation(_delegatee2, _numerator2);
+    vm.expectRevert();
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
+
   // TODO: include this test if we change to a different type/denominator pair for _numerator
   // function testFuzz_RevertIf_DelegationNumeratorTooLarge(
   //   address _actor,
@@ -137,4 +183,29 @@ contract Delegate is PartialDelegationTest {
   //   tokenProxy.delegate(delegations);
   //   vm.stopPrank();
   // }
+}
+
+contract Transfer is PartialDelegationTest {
+  function testFuzz_MovesVotesFromOneDelegateeSetToAnother(
+    address _actor,
+    address _delegatee1,
+    address _delegatee2,
+    uint256 _amount,
+    uint8 _numerator1,
+    uint8 _numerator2
+  ) public {
+    vm.skip(true);
+  }
+
+  function testFuzz_CreatesVotesWhenSenderHasNotDelegated() public {
+    vm.skip(true);
+  }
+
+  function testFuzz_RemovesVoteBalanceWhenReceiverHasNotDelegated() public {
+    vm.skip(true);
+  }
+
+  function testFuzz_HandlesTransfersToSelf(address _actor, uint256 _amount) public {
+    vm.skip(true);
+  }
 }
