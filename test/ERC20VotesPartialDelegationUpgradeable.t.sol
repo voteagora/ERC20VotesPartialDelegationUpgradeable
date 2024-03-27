@@ -3,8 +3,8 @@ pragma solidity 0.8.24;
 
 import {Test, console} from "forge-std/Test.sol";
 import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
-import {ERC20VotesPartialDelegationUpgradeable} from "src/ERC20VotesPartialDelegationUpgradeable.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+// import {ERC20VotesPartialDelegationUpgradeable} from "src/ERC20VotesPartialDelegationUpgradeable.sol";
+// import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 
@@ -24,6 +24,16 @@ contract PartialDelegationTest is Test {
       assertEq(a[i]._delegatee, b[i]._delegatee);
       assertEq(a[i]._numerator, b[i]._numerator);
     }
+  }
+
+  function _createValidPartialDelegationAndAssertions(uint256 _seed) public returns (PartialDelegation[] memory) {
+    uint256 _n = _seed % tokenProxy.MAX_PARTIAL_DELEGATIONS() + 1;
+    PartialDelegation[] memory delegations = new PartialDelegation[](_n);
+    // delegations[0] = PartialDelegation(vm.addr(_seed), 100);
+    // delegations[1] = PartialDelegation();
+    // assertEq(delegations[0]._delegatee, delegations[0]._delegatee);
+    // assertEq(delegations[0]._numerator, delegations[0]._numerator);
+    return delegations;
   }
 }
 
@@ -209,6 +219,30 @@ contract Transfer is PartialDelegationTest {
   }
 
   function testFuzz_HandlesTransfersToSelf(address _actor, uint256 _amount) public {
+    vm.skip(true);
+  }
+}
+
+contract Integration is PartialDelegationTest {
+  function testFuzz_DelegateAndTransfer(address _actor, address _delegatee, uint256 _amount) public {
+    vm.skip(true);
+  }
+
+  function testFuzz_DelegateAndTransferAndDelegate(
+    address _actor,
+    address _delegatee1,
+    address _delegatee2,
+    uint256 _amount
+  ) public {
+    vm.skip(true);
+  }
+
+  function testFuzz_DelegateAndTransferAndDelegateAndTransfer(
+    address _actor,
+    address _delegatee1,
+    address _delegatee2,
+    uint256 _amount
+  ) public {
     vm.skip(true);
   }
 }

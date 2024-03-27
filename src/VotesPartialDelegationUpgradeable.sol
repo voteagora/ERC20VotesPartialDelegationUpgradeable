@@ -219,7 +219,7 @@ abstract contract VotesPartialDelegationUpgradeable is
     PartialDelegation[] memory _oldDelegations = delegates(_account);
     if (_oldDelegations.length > 0) {
       DelegationAdjustment[] memory _old =
-        _calculateWeightDistribution(_oldDelegations, _getVotingUnits(_account), Op.ADD);
+        _calculateWeightDistribution(_oldDelegations, _getVotingUnits(_account), Op.SUBTRACT);
       _createDelegateCheckpoints(_old);
     }
 
@@ -248,23 +248,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     // TODO: emit event
     // emit DelegateChanged(_account, oldDelegate, delegatee);
   }
-
-  //   // TODO: prune zero adjustments, and sum all adjustments per delegate
-  //   function _createDelegationAdjustments(PartialDelegation[] memory _old, PartialDelegation[] memory _new)
-  //     internal
-  //     returns (DelegationAdjustment[] memory)
-  //   {
-  //     DelegationAdjustment[] memory _delegationAdjustments = new DelegationAdjustment[](_old.length + _new.length);
-  //     for (uint256 i = 0; i < _old.length; i++) {
-  //       _delegationAdjustments[i] =
-  //         DelegationAdjustment({_delegatee: _old[i]._delegatee, _amount: _old[i]._numerator, _isAddition: false});
-  //     }
-  //     for (uint256 i = 0; i < _new.length; i++) {
-  //       _delegationAdjustments[i + _old.length] =
-  //         DelegationAdjustment({_delegatee: _new[i]._delegatee, _amount: _new[i]._numerator, _isAddition: true});
-  //     }
-  //     return _delegationAdjustments;
-  //   }
 
   /**
    * @dev Transfers, mints, or burns voting units. To register a mint, `from` should be zero. To register a burn, `to`
