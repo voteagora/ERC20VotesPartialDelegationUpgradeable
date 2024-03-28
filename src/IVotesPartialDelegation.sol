@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 
 struct PartialDelegation {
   address _delegatee;
-  uint8 _numerator;
+  uint96 _numerator;
 }
 
 /**

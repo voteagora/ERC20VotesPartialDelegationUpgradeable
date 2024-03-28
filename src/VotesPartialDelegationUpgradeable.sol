@@ -41,10 +41,11 @@ abstract contract VotesPartialDelegationUpgradeable is
 {
   using Checkpoints for Checkpoints.Trace208;
 
+  bytes32 private constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
   bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
     keccak256("PartialDelegation(PartialDelegation[] delegations,uint256 nonce,uint256 expiry)");
-  uint256 public constant MAX_PARTIAL_DELEGATIONS = 10;
-  uint8 public constant DENOMINATOR = 255;
+  uint256 public constant MAX_PARTIAL_DELEGATIONS = 100;
+  uint96 public constant DENOMINATOR = 10_000;
 
   enum Op {
     ADD,
@@ -171,10 +172,15 @@ abstract contract VotesPartialDelegationUpgradeable is
     return $._delegatees[account];
   }
 
-  // TODO: this no longer makes sense. Are we no longer adhering to ERC5805 or IVotes, then?
-  //   function delegates(address account) external view override returns (address) {
-  //     return account;
-  //   }
+  /**
+   * @dev Delegates votes from the sender to `delegatee`.
+   */
+  function delegate(address delegatee) public virtual {
+    address account = _msgSender();
+    PartialDelegation[] memory delegations = new PartialDelegation[](1);
+    delegations[0] = PartialDelegation(delegatee, DENOMINATOR);
+    _delegate(account, delegations);
+  }
 
   /**
    * @dev Delegates votes from the sender to each `PartialDelegation._delegatee`.
@@ -185,24 +191,43 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @dev Delegates votes from signer to `delegatee`.
+   * @notice Delegates votes from signer to `delegatee`.
+   * @custom:legacy
    */
-  function delegateBySig(
-    PartialDelegation[] memory _partialDelegations,
-    uint256 nonce,
-    uint256 expiry,
-    uint8 v,
-    bytes32 r,
-    bytes32 s
-  ) public virtual {
+  function delegateBySig(address delegatee, uint256 nonce, uint256 expiry, uint8 v, bytes32 r, bytes32 s)
+    public
+    virtual
+  {
     if (block.timestamp > expiry) {
       revert VotesExpiredSignature(expiry);
     }
-    address signer = ECDSA.recover(
-      _hashTypedDataV4(keccak256(abi.encode(PARTIAL_DELEGATION_TYPEHASH, _partialDelegations, nonce, expiry))), v, r, s
-    );
+    address signer =
+      ECDSA.recover(_hashTypedDataV4(keccak256(abi.encode(DELEGATION_TYPEHASH, delegatee, nonce, expiry))), v, r, s);
     _useCheckedNonce(signer, nonce);
+    PartialDelegation[] memory _partialDelegations = new PartialDelegation[](1);
+    _partialDelegations[0] = PartialDelegation(delegatee, DENOMINATOR);
     _delegate(signer, _partialDelegations);
+  }
+
+  /**
+   * @dev Delegates votes from signer to `delegatee`.
+   */
+  function delegateOnBehalf(
+    PartialDelegation[] memory _partialDelegations,
+    uint256 _nonce,
+    uint256 _expiry,
+    bytes calldata _signature
+  ) public virtual {
+    if (block.timestamp > _expiry) {
+      revert VotesExpiredSignature(_expiry);
+    }
+    // TODO: prefer this, or isValidSignatureNow?
+    address _signer = ECDSA.recover(
+      _hashTypedDataV4(keccak256(abi.encode(PARTIAL_DELEGATION_TYPEHASH, _partialDelegations, _nonce, _expiry))),
+      _signature
+    );
+    _useCheckedNonce(_signer, _nonce);
+    _delegate(_signer, _partialDelegations);
   }
 
   /**
@@ -210,8 +235,8 @@ abstract contract VotesPartialDelegationUpgradeable is
    *
    * Emits events {IVotes-DelegateChanged} and {IVotes-DelegateVotesChanged}.
    */
-  function _delegate(address _account, PartialDelegation[] memory _partialDelegations) internal virtual {
-    if (_partialDelegations.length > MAX_PARTIAL_DELEGATIONS) {
+  function _delegate(address _account, PartialDelegation[] memory _newDelegations) internal virtual {
+    if (_newDelegations.length > MAX_PARTIAL_DELEGATIONS) {
       revert("VotesPartialDelegation: too many partial delegations");
     }
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
@@ -224,23 +249,26 @@ abstract contract VotesPartialDelegationUpgradeable is
     }
 
     DelegationAdjustment[] memory _new =
-      _calculateWeightDistribution(_partialDelegations, _getVotingUnits(_account), Op.ADD);
+      _calculateWeightDistribution(_newDelegations, _getVotingUnits(_account), Op.ADD);
     _createDelegateCheckpoints(_new);
 
     // Replace the old delegatees with the new ones
     uint256 _oldDelegateLength = _oldDelegations.length;
-    for (uint256 i = 0; i < _partialDelegations.length; i++) {
-      if (i < _oldDelegateLength) {
-        $._delegatees[_account][i] = _partialDelegations[i];
-      } else {
-        $._delegatees[_account].push(_partialDelegations[i]);
+    address _lastDelegatee;
+    for (uint256 i = 0; i < _newDelegations.length; i++) {
+      if (_newDelegations[i]._delegatee <= _lastDelegatee) {
+        revert("VotesPartialDelegation: delegatees must be sorted with no duplicates");
       }
-      // if (i == _oldDelegateLength) {
-      //   $._delegatees[_account].pop();
-      // }
+      if (i < _oldDelegateLength) {
+        $._delegatees[_account][i] = _newDelegations[i];
+      } else {
+        $._delegatees[_account].push(_newDelegations[i]);
+      }
+      // keep track of last delegatee to ensure ordering / uniqueness
+      _lastDelegatee = _newDelegations[i]._delegatee;
     }
-    if (_oldDelegateLength > _partialDelegations.length) {
-      for (uint256 i = _partialDelegations.length; i < _oldDelegateLength; i++) {
+    if (_oldDelegateLength > _newDelegations.length) {
+      for (uint256 i = _newDelegations.length; i < _oldDelegateLength; i++) {
         $._delegatees[_account].pop();
       }
     }
@@ -262,6 +290,7 @@ abstract contract VotesPartialDelegationUpgradeable is
       _push($._totalCheckpoints, _subtract, SafeCast.toUint208(amount));
     }
     // This case is more complicated than a delegation.
+    console2.log("OK");
     DelegationAdjustment[] memory _delegationAdjustments = _calculateDelegateVoteAdjustments(from, to, amount);
     if (_delegationAdjustments.length > 0) {
       _createDelegateCheckpoints(_delegationAdjustments);
@@ -292,13 +321,14 @@ abstract contract VotesPartialDelegationUpgradeable is
         });
       }
     }
+    console2.log("ok2");
     if ($._delegatees[to].length > 0) {
       DelegationAdjustment[] memory _to =
         _calculateWeightDistribution($._delegatees[to], _getVotingUnits(to), Op.ADD /* unused */ );
       DelegationAdjustment[] memory _toNew =
         _calculateWeightDistribution($._delegatees[to], amount + _getVotingUnits(to), Op.ADD /* unused */ );
-      for (uint256 i = $._delegatees[from].length; i < $._delegatees[from].length + _to.length; i++) {
-        _delegationAdjustments[i] = (
+      for (uint256 i = 0; i < _to.length; i++) {
+        _delegationAdjustments[i + $._delegatees[from].length] = (
           DelegationAdjustment({
             _delegatee: $._delegatees[to][i]._delegatee,
             _amount: _toNew[i]._amount - _to[i]._amount,
@@ -307,6 +337,7 @@ abstract contract VotesPartialDelegationUpgradeable is
         );
       }
     }
+    console2.log("ok3");
     // TODO: prune zero adjustments, sum all adjustments per delegate
     return _delegationAdjustments;
   }
@@ -338,20 +369,22 @@ abstract contract VotesPartialDelegationUpgradeable is
     uint256 _totalVotes = 0;
     uint256 _totalNumerator = 0;
     for (uint256 i = 0; i < _delegations.length; i++) {
+      if (_delegations[i]._numerator == 0) {
+        revert("VotesPartialDelegation: invalid numerator of 0");
+      }
       _delegationAdjustments[i] = DelegationAdjustment(
         _delegations[i]._delegatee, uint208(_amount * _delegations[i]._numerator / DENOMINATOR), _op
       );
       _totalNumerator += _delegations[i]._numerator;
       _totalVotes += _delegationAdjustments[i]._amount;
     }
+    if (_totalNumerator > DENOMINATOR) {
+      revert("VotesPartialDelegation: delegation numerators sum to more than DENOMINATOR");
+    }
     // assign remaining weight to last delegatee
     // TODO: determine correct behavior
     if (_totalVotes < _amount && _amount != 0) {
       _delegationAdjustments[_delegations.length - 1]._amount += uint208(_amount - _totalVotes);
-    }
-    // TODO: include this if we change the type/denominator
-    if (_totalNumerator > DENOMINATOR) {
-      revert("VotesPartialDelegation: delegation numerators sum to more than DENOMINATOR");
     }
     return _delegationAdjustments;
   }

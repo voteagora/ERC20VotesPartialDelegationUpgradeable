@@ -19,20 +19,26 @@ contract PartialDelegationTest is Test {
   }
 
   function assertEq(PartialDelegation[] memory a, PartialDelegation[] memory b) public {
-    assertEq(a.length, b.length);
+    assertEq(a.length, b.length, "length mismatch");
     for (uint256 i = 0; i < a.length; i++) {
-      assertEq(a[i]._delegatee, b[i]._delegatee);
-      assertEq(a[i]._numerator, b[i]._numerator);
+      assertEq(a[i]._delegatee, b[i]._delegatee, "delegatee mismatch");
+      assertEq(a[i]._numerator, b[i]._numerator, "numerator mismatch");
     }
   }
 
-  function _createValidPartialDelegationAndAssertions(uint256 _seed) public returns (PartialDelegation[] memory) {
-    uint256 _n = _seed % tokenProxy.MAX_PARTIAL_DELEGATIONS() + 1;
+  function _createValidPartialDelegation(uint256 _n, uint256 _seed) internal view returns (PartialDelegation[] memory) {
+    _seed = bound(
+      _seed,
+      1,
+      /* private key can't be bigger than secp256k1 curve order */
+      115_792_089_237_316_195_423_570_985_008_687_907_852_837_564_279_074_904_382_605_163_141_518_161_494_337 - 1
+    );
+    _n = _n != 0 ? _n : (_seed % tokenProxy.MAX_PARTIAL_DELEGATIONS()) + 1;
     PartialDelegation[] memory delegations = new PartialDelegation[](_n);
-    // delegations[0] = PartialDelegation(vm.addr(_seed), 100);
-    // delegations[1] = PartialDelegation();
-    // assertEq(delegations[0]._delegatee, delegations[0]._delegatee);
-    // assertEq(delegations[0]._numerator, delegations[0]._numerator);
+    for (uint256 i = 0; i < _n; i++) {
+      uint96 _numerator = uint96(bound(0, 1, tokenProxy.DENOMINATOR() - _n));
+      delegations[i] = PartialDelegation(address(uint160(uint160(vm.addr(_seed)) + i)), _numerator);
+    }
     return delegations;
   }
 }
@@ -51,7 +57,7 @@ contract Delegate is PartialDelegationTest {
     assertEq(tokenProxy.getVotes(_actor), _amount);
   }
 
-  function testFuzz_DelegatesToAnyAddress(address _actor, address _delegatee, uint256 _amount) public {
+  function testFuzz_DelegatesToAnySingleAddress(address _actor, address _delegatee, uint256 _amount) public {
     vm.assume(_actor != address(0));
     vm.assume(_delegatee != address(0));
     _amount = bound(_amount, 0, type(uint208).max);
@@ -70,16 +76,15 @@ contract Delegate is PartialDelegationTest {
     address _delegatee1,
     address _delegatee2,
     uint256 _amount,
-    uint8 _numerator1,
-    uint8 _numerator2
+    uint96 _numerator1,
+    uint96 _numerator2
   ) public {
     vm.assume(_actor != address(0));
     vm.assume(_delegatee1 != address(0));
     vm.assume(_delegatee2 != address(0));
-    vm.assume(_delegatee1 != _delegatee2);
+    vm.assume(_delegatee1 < _delegatee2);
     _amount = bound(_amount, 0, type(uint208).max);
-    // TODO: should we support delegations w 0 numerator?
-    _numerator1 = uint8(bound(_numerator1, 1, tokenProxy.DENOMINATOR() - 1));
+    _numerator1 = uint96(bound(_numerator1, 1, tokenProxy.DENOMINATOR() - 1));
     _numerator2 = tokenProxy.DENOMINATOR() - _numerator1;
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
@@ -101,17 +106,17 @@ contract Delegate is PartialDelegationTest {
     address _delegatee1,
     address _delegatee2,
     uint256 _amount,
-    uint8 _numerator1,
-    uint8 _numerator2
+    uint96 _numerator1,
+    uint96 _numerator2
   ) public {
     vm.assume(_actor != address(0));
     vm.assume(_delegatee1 != address(0));
     vm.assume(_delegatee2 != address(0));
-    vm.assume(_delegatee1 != _delegatee2);
+    vm.assume(_delegatee1 < _delegatee2);
     _amount = bound(_amount, 0, type(uint208).max);
-    _numerator1 = uint8(bound(_numerator1, 1, tokenProxy.DENOMINATOR() - 2));
+    _numerator1 = uint96(bound(_numerator1, 1, tokenProxy.DENOMINATOR() - 2));
     // numerator1 + numerator2 < 100
-    _numerator2 = uint8(bound(_numerator2, 1, tokenProxy.DENOMINATOR() - _numerator1 - 1));
+    _numerator2 = uint96(bound(_numerator2, 1, tokenProxy.DENOMINATOR() - _numerator1 - 1));
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
     PartialDelegation[] memory delegations = new PartialDelegation[](2);
@@ -129,17 +134,94 @@ contract Delegate is PartialDelegationTest {
     assertEq(tokenProxy.balanceOf(_actor), _amount);
   }
 
+  function testFuzz_DelegatesToNAddressesWithCorrectNumeratorSum(
+    address _actor,
+    uint256 _amount,
+    uint256 _n,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+    assertEq(tokenProxy.delegates(_actor), delegations);
+    uint256 _totalVotes = 0;
+    for (uint256 i = 0; i < _n; i++) {
+      if (i == _n - 1) {
+        assertEq(
+          tokenProxy.getVotes(delegations[i]._delegatee), _amount - _totalVotes, "last voter has wrong vote amount"
+        );
+      } else {
+        assertEq(
+          tokenProxy.getVotes(delegations[i]._delegatee),
+          _amount * delegations[i]._numerator / tokenProxy.DENOMINATOR(),
+          "voter has wrong vote amount"
+        );
+      }
+      _totalVotes += tokenProxy.getVotes(delegations[i]._delegatee);
+    }
+    assertEq(_totalVotes, _amount, "totalVotes mismatch");
+  }
+
+  function testFuzz_DelegatesToNAddressesAndThenDelegatesToOtherAddresses(
+    address _actor,
+    uint256 _amount,
+    uint256 _n,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+    assertEq(tokenProxy.delegates(_actor), delegations);
+    PartialDelegation[] memory newDelegations = _createValidPartialDelegation( /* setting n to 0 here means seed will
+      generate random n */ 0, uint256(keccak256(abi.encode(_seed))));
+    vm.startPrank(_actor);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+    assertEq(tokenProxy.delegates(_actor), newDelegations);
+    uint256 _totalVotes = 0;
+    _n = newDelegations.length;
+    for (uint256 i = 0; i < _n; i++) {
+      if (i == _n - 1) {
+        console.log("last voter...");
+        assertEq(
+          tokenProxy.getVotes(newDelegations[i]._delegatee), _amount - _totalVotes, "last voter has wrong vote amount"
+        );
+      } else {
+        assertEq(
+          tokenProxy.getVotes(newDelegations[i]._delegatee),
+          _amount * newDelegations[i]._numerator / tokenProxy.DENOMINATOR(),
+          "voter has wrong vote amount"
+        );
+      }
+      _totalVotes += tokenProxy.getVotes(newDelegations[i]._delegatee);
+    }
+    assertEq(_totalVotes, _amount, "totalVotes mismatch");
+    // initial delegates should have 0 vote power (assuming set union is empty)
+    for (uint256 i = 0; i < delegations.length; i++) {
+      assertEq(tokenProxy.getVotes(delegations[i]._delegatee), 0, "initial delegate has vote power");
+    }
+  }
+
   function testFuzz_RevertIf_DelegationArrayIncludesDuplicates(
     address _actor,
     address _delegatee,
     uint256 _amount,
-    uint8 _numerator
+    uint96 _numerator
   ) public {
-    vm.skip(true);
     vm.assume(_actor != address(0));
     vm.assume(_delegatee != address(0));
     _amount = bound(_amount, 0, type(uint208).max);
-    _numerator = uint8(bound(_numerator, 1, tokenProxy.DENOMINATOR() - 1));
+    _numerator = uint96(bound(_numerator, 1, tokenProxy.DENOMINATOR() - 1));
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
     PartialDelegation[] memory delegations = new PartialDelegation[](2);
@@ -155,16 +237,16 @@ contract Delegate is PartialDelegationTest {
     address _delegatee1,
     address _delegatee2,
     uint256 _amount,
-    uint8 _numerator1,
-    uint8 _numerator2
+    uint96 _numerator1,
+    uint96 _numerator2
   ) public {
     vm.assume(_actor != address(0));
     vm.assume(_delegatee1 != address(0));
     vm.assume(_delegatee2 != address(0));
-    vm.assume(_delegatee1 != _delegatee2);
+    vm.assume(_delegatee1 < _delegatee2);
     _amount = bound(_amount, 0, type(uint208).max);
-    _numerator1 = uint8(bound(_numerator1, 1, tokenProxy.DENOMINATOR()));
-    _numerator2 = tokenProxy.DENOMINATOR() - _numerator1 + 1;
+    _numerator1 = uint96(bound(_numerator1, 1, tokenProxy.DENOMINATOR()));
+    _numerator2 = uint96(bound(_numerator2, tokenProxy.DENOMINATOR() - _numerator1 + 1, type(uint96).max - _numerator1));
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
     PartialDelegation[] memory delegations = new PartialDelegation[](2);
@@ -176,38 +258,83 @@ contract Delegate is PartialDelegationTest {
   }
 
   // TODO: include this test if we change to a different type/denominator pair for _numerator
-  // function testFuzz_RevertIf_DelegationNumeratorTooLarge(
-  //   address _actor,
-  //   address _delegatee,
-  //   uint256 _amount,
-  //   uint8 _numerator
-  // ) public {
-  //   vm.assume(_actor != address(0));
-  //   vm.assume(_delegatee != address(0));
-  //   _numerator = uint8(bound(_numerator, tokenProxy.DENOMINATOR() + 1, type(uint8).max));
-  //   _amount = bound(_amount, 0, type(uint208).max);
-  //   vm.startPrank(_actor);
-  //   tokenProxy.mint(_amount);
-  //   PartialDelegation[] memory delegations = new PartialDelegation[](1);
-  //   delegations[0] = PartialDelegation(_delegatee, _numerator);
-  //   vm.expectRevert();
-  //   tokenProxy.delegate(delegations);
-  //   vm.stopPrank();
-  // }
+  function testFuzz_RevertIf_DelegationNumeratorTooLarge(
+    address _actor,
+    address _delegatee,
+    uint256 _amount,
+    uint96 _numerator
+  ) public {
+    vm.assume(_actor != address(0));
+    vm.assume(_delegatee != address(0));
+    _numerator = uint96(bound(_numerator, tokenProxy.DENOMINATOR() + 1, type(uint96).max));
+    _amount = bound(_amount, 0, type(uint208).max);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    PartialDelegation[] memory delegations = new PartialDelegation[](1);
+    delegations[0] = PartialDelegation(_delegatee, _numerator);
+    vm.expectRevert();
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
 }
 
 contract DelegateBySig is PartialDelegationTest {}
 
 contract Transfer is PartialDelegationTest {
   function testFuzz_MovesVotesFromOneDelegateeSetToAnother(
-    address _actor,
-    address _delegatee1,
-    address _delegatee2,
+    address _from,
+    address _to,
     uint256 _amount,
-    uint8 _numerator1,
-    uint8 _numerator2
+    uint256 _toExistingBalance
   ) public {
-    vm.skip(true);
+    vm.assume(_from != address(0));
+    vm.assume(_to != address(0));
+    vm.assume(_from != _to);
+    _amount = bound(_amount, 0, type(uint208).max);
+    _toExistingBalance = bound(_toExistingBalance, 0, type(uint208).max - _amount);
+    PartialDelegation[] memory _fromDelegations =
+      _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_from))));
+    PartialDelegation[] memory _toDelegations = _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_to))));
+    vm.startPrank(_to);
+    tokenProxy.mint(_toExistingBalance);
+    tokenProxy.delegate(_toDelegations);
+    vm.stopPrank();
+    vm.startPrank(_from);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(_fromDelegations);
+    tokenProxy.transfer(_to, _amount);
+    vm.stopPrank();
+
+    // check that voting power has been reduced on `from` side by proper amount
+    uint256 _fromTotal = 0;
+    for (uint256 i = 0; i < _fromDelegations.length; i++) {
+      assertEq(tokenProxy.getVotes(_fromDelegations[i]._delegatee), 0);
+      _fromTotal += tokenProxy.getVotes(_fromDelegations[i]._delegatee);
+    }
+    assertEq(_fromTotal, 0, "`from` address total votes mismatch");
+    // check that voting power has been augmented on `to` side by proper amount
+    uint256 _toTotal = 0;
+    for (uint256 i = 0; i < _toDelegations.length; i++) {
+      if (i == _toDelegations.length - 1) {
+        console.log("last voter...");
+        assertEq(
+          tokenProxy.getVotes(_toDelegations[i]._delegatee),
+          _toExistingBalance + _amount - _toTotal,
+          "last voter has wrong vote amount"
+        );
+      } else {
+        assertEq(
+          tokenProxy.getVotes(_toDelegations[i]._delegatee),
+          (_toExistingBalance + _amount) * _toDelegations[i]._numerator / tokenProxy.DENOMINATOR(),
+          "voter has wrong vote amount"
+        );
+      }
+      _toTotal += tokenProxy.getVotes(_toDelegations[i]._delegatee);
+    }
+    assertEq(_toTotal, _toExistingBalance + _amount, "`to` address total votes mismatch");
+    // check that the asset balance successfully updated
+    assertEq(tokenProxy.balanceOf(_from), 0, "nonzero `from` balance");
+    assertEq(tokenProxy.balanceOf(_to), _toExistingBalance + _amount, "`to` balance mismatch");
   }
 
   function testFuzz_CreatesVotesWhenSenderHasNotDelegated() public {
@@ -224,10 +351,6 @@ contract Transfer is PartialDelegationTest {
 }
 
 contract Integration is PartialDelegationTest {
-  function testFuzz_DelegateAndTransfer(address _actor, address _delegatee, uint256 _amount) public {
-    vm.skip(true);
-  }
-
   function testFuzz_DelegateAndTransferAndDelegate(
     address _actor,
     address _delegatee1,
