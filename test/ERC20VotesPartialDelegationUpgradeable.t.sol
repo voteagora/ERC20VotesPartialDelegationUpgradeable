@@ -35,9 +35,24 @@ contract PartialDelegationTest is Test {
     );
     _n = _n != 0 ? _n : (_seed % tokenProxy.MAX_PARTIAL_DELEGATIONS()) + 1;
     PartialDelegation[] memory delegations = new PartialDelegation[](_n);
+    uint96 _totalNumerator;
     for (uint256 i = 0; i < _n; i++) {
-      uint96 _numerator = uint96(bound(0, 1, tokenProxy.DENOMINATOR() - _n));
+      // TODO: determine if this numerator definition is correct (I think it's selecting `1` every time)
+      console.log(
+        _n,
+        i,
+        uint256(keccak256(abi.encode(_seed + i))) % tokenProxy.DENOMINATOR(),
+        tokenProxy.DENOMINATOR() - _totalNumerator - (_n - i)
+      );
+      uint96 _numerator = uint96(
+        bound(
+          uint256(keccak256(abi.encode(_seed + i))) % tokenProxy.DENOMINATOR(),
+          1,
+          tokenProxy.DENOMINATOR() - _totalNumerator - (_n - i)
+        )
+      );
       delegations[i] = PartialDelegation(address(uint160(uint160(vm.addr(_seed)) + i)), _numerator);
+      _totalNumerator += _numerator;
     }
     return delegations;
   }
@@ -257,7 +272,6 @@ contract Delegate is PartialDelegationTest {
     vm.stopPrank();
   }
 
-  // TODO: include this test if we change to a different type/denominator pair for _numerator
   function testFuzz_RevertIf_DelegationNumeratorTooLarge(
     address _actor,
     address _delegatee,
@@ -335,6 +349,7 @@ contract Transfer is PartialDelegationTest {
     // check that the asset balance successfully updated
     assertEq(tokenProxy.balanceOf(_from), 0, "nonzero `from` balance");
     assertEq(tokenProxy.balanceOf(_to), _toExistingBalance + _amount, "`to` balance mismatch");
+    assertEq(tokenProxy.totalSupply(), _toExistingBalance + _amount, "total supply mismatch");
   }
 
   function testFuzz_CreatesVotesWhenSenderHasNotDelegated() public {
@@ -345,8 +360,36 @@ contract Transfer is PartialDelegationTest {
     vm.skip(true);
   }
 
-  function testFuzz_HandlesTransfersToSelf(address _actor, uint256 _amount) public {
-    vm.skip(true);
+  function testFuzz_HandlesTransfersToSelf(address _holder, uint256 _transferAmount, uint256 _existingBalance) public {
+    vm.assume(_holder != address(0));
+    _transferAmount = bound(_transferAmount, 0, type(uint208).max);
+    _existingBalance = bound(_existingBalance, _transferAmount, type(uint208).max);
+    PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_holder))));
+    vm.startPrank(_holder);
+    tokenProxy.mint(_existingBalance);
+    tokenProxy.delegate(_delegations);
+    tokenProxy.transfer(_holder, _transferAmount);
+    vm.stopPrank();
+
+    uint256 _total = 0;
+    for (uint256 i = 0; i < _delegations.length; i++) {
+      if (i == _delegations.length - 1) {
+        console.log("last voter...");
+        assertEq(
+          tokenProxy.getVotes(_delegations[i]._delegatee), _existingBalance - _total, "last voter has wrong vote amount"
+        );
+      } else {
+        assertEq(
+          tokenProxy.getVotes(_delegations[i]._delegatee),
+          _existingBalance * _delegations[i]._numerator / tokenProxy.DENOMINATOR(),
+          "voter has wrong vote amount"
+        );
+      }
+      _total += tokenProxy.getVotes(_delegations[i]._delegatee);
+    }
+    assertEq(_total, _existingBalance, "vote count is wrong");
+    assertEq(tokenProxy.balanceOf(_holder), _existingBalance, "holder balance is wrong");
+    assertEq(tokenProxy.totalSupply(), _existingBalance, "total supply mismatch");
   }
 }
 

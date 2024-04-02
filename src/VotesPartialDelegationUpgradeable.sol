@@ -282,6 +282,9 @@ abstract contract VotesPartialDelegationUpgradeable is
    * should be zero. Total supply of voting units will be adjusted with mints and burns.
    */
   function _transferVotingUnits(address from, address to, uint256 amount) internal virtual {
+    if (from == to) {
+      return;
+    }
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     if (from == address(0)) {
       _push($._totalCheckpoints, _add, SafeCast.toUint208(amount));
@@ -290,7 +293,6 @@ abstract contract VotesPartialDelegationUpgradeable is
       _push($._totalCheckpoints, _subtract, SafeCast.toUint208(amount));
     }
     // This case is more complicated than a delegation.
-    console2.log("OK");
     DelegationAdjustment[] memory _delegationAdjustments = _calculateDelegateVoteAdjustments(from, to, amount);
     if (_delegationAdjustments.length > 0) {
       _createDelegateCheckpoints(_delegationAdjustments);
@@ -304,6 +306,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
 
+    // TODO: consider a no-op if from=to
     DelegationAdjustment[] memory _delegationAdjustments =
       new DelegationAdjustment[]($._delegatees[from].length + $._delegatees[to].length);
     if ($._delegatees[from].length > 0) {
@@ -313,31 +316,65 @@ abstract contract VotesPartialDelegationUpgradeable is
         _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from), Op.ADD /* unused */ );
       DelegationAdjustment[] memory _fromNew =
         _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from) - amount, Op.ADD /* unused */ );
+
       for (uint256 i = 0; i < _from.length; i++) {
-        _delegationAdjustments[i] = DelegationAdjustment({
-          _delegatee: $._delegatees[from][i]._delegatee,
-          _amount: _from[i]._amount - _fromNew[i]._amount,
-          _op: Op.SUBTRACT
-        });
+        if (i != _from.length - 1) {
+          _delegationAdjustments[i] = DelegationAdjustment({
+            _delegatee: $._delegatees[from][i]._delegatee,
+            _amount: _from[i]._amount - _fromNew[i]._amount,
+            _op: Op.SUBTRACT
+          });
+        } else {
+          // special treatment of remainder delegatee
+          Op _op;
+          uint208 _amount;
+          if (_fromNew[i]._amount == _from[i]._amount) {
+            continue;
+          } else if (_fromNew[i]._amount > _from[i]._amount) {
+            _op = Op.ADD;
+            _amount = _fromNew[i]._amount - _from[i]._amount;
+          } else {
+            _op = Op.SUBTRACT;
+            _amount = _from[i]._amount - _fromNew[i]._amount;
+          }
+          _delegationAdjustments[i] =
+            DelegationAdjustment({_delegatee: $._delegatees[from][i]._delegatee, _amount: _amount, _op: _op});
+        }
       }
     }
-    console2.log("ok2");
     if ($._delegatees[to].length > 0) {
       DelegationAdjustment[] memory _to =
         _calculateWeightDistribution($._delegatees[to], _getVotingUnits(to), Op.ADD /* unused */ );
       DelegationAdjustment[] memory _toNew =
         _calculateWeightDistribution($._delegatees[to], amount + _getVotingUnits(to), Op.ADD /* unused */ );
+
       for (uint256 i = 0; i < _to.length; i++) {
-        _delegationAdjustments[i + $._delegatees[from].length] = (
-          DelegationAdjustment({
-            _delegatee: $._delegatees[to][i]._delegatee,
-            _amount: _toNew[i]._amount - _to[i]._amount,
-            _op: Op.ADD
-          })
-        );
+        if (i < _to.length - 1) {
+          _delegationAdjustments[i + $._delegatees[from].length] = (
+            DelegationAdjustment({
+              _delegatee: $._delegatees[to][i]._delegatee,
+              _amount: _toNew[i]._amount - _to[i]._amount,
+              _op: Op.ADD
+            })
+          );
+        } else {
+          // special treatment of remainder delegatee
+          Op _op;
+          uint208 _amount;
+          if (_toNew[i]._amount == _to[i]._amount) {
+            continue;
+          } else if (_toNew[i]._amount > _to[i]._amount) {
+            _op = Op.ADD;
+            _amount = _toNew[i]._amount - _to[i]._amount;
+          } else {
+            _op = Op.SUBTRACT;
+            _amount = _to[i]._amount - _toNew[i]._amount;
+          }
+          _delegationAdjustments[i + $._delegatees[from].length] =
+            (DelegationAdjustment({_delegatee: $._delegatees[to][i]._delegatee, _amount: _amount, _op: _op}));
+        }
       }
     }
-    console2.log("ok3");
     // TODO: prune zero adjustments, sum all adjustments per delegate
     return _delegationAdjustments;
   }
@@ -383,9 +420,10 @@ abstract contract VotesPartialDelegationUpgradeable is
     }
     // assign remaining weight to last delegatee
     // TODO: determine correct behavior
-    if (_totalVotes < _amount && _amount != 0) {
+    if (_totalVotes < _amount) {
       _delegationAdjustments[_delegations.length - 1]._amount += uint208(_amount - _totalVotes);
     }
+
     return _delegationAdjustments;
   }
 
