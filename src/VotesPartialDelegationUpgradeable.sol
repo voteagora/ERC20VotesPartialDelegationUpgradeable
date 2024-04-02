@@ -318,28 +318,29 @@ abstract contract VotesPartialDelegationUpgradeable is
         _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from) - amount, Op.ADD /* unused */ );
 
       for (uint256 i = 0; i < _from.length; i++) {
-        if (i != _from.length - 1) {
-          _delegationAdjustments[i] = DelegationAdjustment({
-            _delegatee: $._delegatees[from][i]._delegatee,
-            _amount: _from[i]._amount - _fromNew[i]._amount,
-            _op: Op.SUBTRACT
-          });
-        } else {
-          // special treatment of remainder delegatee
-          Op _op;
-          uint208 _amount;
-          if (_fromNew[i]._amount == _from[i]._amount) {
-            continue;
-          } else if (_fromNew[i]._amount > _from[i]._amount) {
-            _op = Op.ADD;
-            _amount = _fromNew[i]._amount - _from[i]._amount;
-          } else {
-            _op = Op.SUBTRACT;
-            _amount = _from[i]._amount - _fromNew[i]._amount;
-          }
-          _delegationAdjustments[i] =
-            DelegationAdjustment({_delegatee: $._delegatees[from][i]._delegatee, _amount: _amount, _op: _op});
-        }
+        // TODO: determine if remainder treatment is necessary (test says no)
+        // if (i != _from.length - 1) {
+        _delegationAdjustments[i] = DelegationAdjustment({
+          _delegatee: $._delegatees[from][i]._delegatee,
+          _amount: _from[i]._amount - _fromNew[i]._amount,
+          _op: Op.SUBTRACT
+        });
+        // } else {
+        //   // special treatment of remainder delegatee
+        //   Op _op;
+        //   uint208 _amount;
+        //   if (_fromNew[i]._amount == _from[i]._amount) {
+        //     continue;
+        //   } else if (_fromNew[i]._amount > _from[i]._amount) {
+        //     _op = Op.ADD;
+        //     _amount = _fromNew[i]._amount - _from[i]._amount;
+        //   } else {
+        //     _op = Op.SUBTRACT;
+        //     _amount = _from[i]._amount - _fromNew[i]._amount;
+        //   }
+        //   _delegationAdjustments[i] =
+        //     DelegationAdjustment({_delegatee: $._delegatees[from][i]._delegatee, _amount: _amount, _op: _op});
+        // }
       }
     }
     if ($._delegatees[to].length > 0) {
