@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.24;
+
+import {Test} from "forge-std/Test.sol";
+import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
+import {Handler} from "./Handler.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
+contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
+  Handler public handler;
+  FakeERC20VotesPartialDelegationUpgradeable tokenImpl;
+  FakeERC20VotesPartialDelegationUpgradeable tokenProxy;
+
+  function setUp() public {
+    tokenImpl = new FakeERC20VotesPartialDelegationUpgradeable();
+    tokenProxy = FakeERC20VotesPartialDelegationUpgradeable(address(new ERC1967Proxy(address(tokenImpl), "")));
+    tokenProxy.initialize();
+    handler = new Handler(tokenImpl, tokenProxy);
+    vm.label(address(handler), "Handler contract");
+
+    bytes4[] memory selectors = new bytes4[](7);
+    selectors[0] = Handler.handler_mint.selector;
+    selectors[1] = Handler.handler_mintAndDelegateSingle.selector;
+    selectors[2] = Handler.handler_mintAndDelegateMulti.selector;
+    selectors[3] = Handler.handler_redelegate.selector;
+    selectors[4] = Handler.handler_undelegate.selector;
+    selectors[5] = Handler.handler_validNonZeroTransferToNonDelegator.selector;
+    selectors[6] = Handler.handler_validNonZeroTransferToDelegator.selector;
+    targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
+
+    targetContract(address(handler));
+  }
+
+  // Invariants
+
+  function invariant_SumOfBalancesEqualsTotalSupply() public {
+    uint256 _sumOfBalances = handler.reduceHolders(0, this.accumulateBalances);
+    assertEq(_sumOfBalances, tokenProxy.totalSupply());
+  }
+
+  function invariant_SumOfVotesPlusSumOfNonDelegateBalancesEqualsTotalSupply() public {
+    uint256 _sumOfVotesPlusSumOfNonDelegateBalances =
+      handler.reduceDelegatees(0, this.accumulateVotes) + handler.reduceNonDelegators(0, this.accumulateBalances);
+    assertEq(_sumOfVotesPlusSumOfNonDelegateBalances, tokenProxy.totalSupply());
+  }
+
+  // Used to see distribution of non-reverting calls
+  /// forge-config: default.invariant.runs = 1
+  /// forge-config: default.verbosity = 0
+  function invariant_callSummary() external view {
+    handler.handler_callSummary();
+  }
+
+  function accumulateBalances(uint256 acc, address holder) public view returns (uint256) {
+    return acc + tokenProxy.balanceOf(holder);
+  }
+
+  function accumulateVotes(uint256 acc, address delegator) public view returns (uint256) {
+    return acc + tokenProxy.getVotes(delegator);
+  }
+}
