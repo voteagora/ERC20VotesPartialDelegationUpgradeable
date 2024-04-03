@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.23;
+pragma solidity ^0.8.24;
 
 // AddressSet.sol comes from
 // https://github.com/horsefacts/weth-invariant-testing/blob/973156bc9b6684f0cf62de19e9bb4c5c27a41bb2/test/helpers/AddressSet.sol
@@ -26,8 +26,11 @@ library LibAddressSet {
   }
 
   function rand(AddressSet storage s, uint256 seed) internal view returns (address) {
-    if (s.addrs.length > 0) return s.addrs[seed % s.addrs.length];
-    else return address(0);
+    if (s.addrs.length > 0) {
+      return s.addrs[seed % s.addrs.length];
+    } else {
+      return address(0);
+    }
   }
 
   function forEach(AddressSet storage s, function(address) external func) internal {
@@ -36,11 +39,10 @@ library LibAddressSet {
     }
   }
 
-  function reduce(
-    AddressSet storage s,
-    uint256 acc,
-    function(uint256,address) external returns (uint256) func
-  ) internal returns (uint256) {
+  function reduce(AddressSet storage s, uint256 acc, function(uint256,address) external returns (uint256) func)
+    internal
+    returns (uint256)
+  {
     for (uint256 i; i < s.addrs.length; ++i) {
       acc = func(acc, s.addrs[i]);
     }
