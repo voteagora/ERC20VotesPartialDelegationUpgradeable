@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.24;
 
-import {Test} from "forge-std/Test.sol";
+import {Test, console2} from "forge-std/Test.sol";
 import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
 import {Handler} from "./Handler.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
@@ -44,9 +44,15 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
     assertEq(_sumOfVotesPlusSumOfNonDelegateBalances, tokenProxy.totalSupply());
   }
 
+  function invariant_SumOfVotesEqualsPastTotalSupply() public {
+    uint256 blockNum = vm.getBlockNumber();
+    vm.roll(blockNum + 1);
+    uint256 _sumOfVotes =
+      handler.reduceDelegatees(0, this.accumulateVotes) + handler.reduceNonDelegators(0, this.accumulateBalances);
+    assertEq(_sumOfVotes, tokenProxy.getPastTotalSupply(blockNum));
+  }
+
   // Used to see distribution of non-reverting calls
-  /// forge-config: default.invariant.runs = 1
-  /// forge-config: default.verbosity = 0
   function invariant_callSummary() external view {
     handler.handler_callSummary();
   }

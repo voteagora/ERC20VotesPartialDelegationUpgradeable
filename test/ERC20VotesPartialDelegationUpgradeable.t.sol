@@ -3,8 +3,6 @@ pragma solidity 0.8.24;
 
 import {Test, console} from "forge-std/Test.sol";
 import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
-// import {ERC20VotesPartialDelegationUpgradeable} from "src/ERC20VotesPartialDelegationUpgradeable.sol";
-// import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 
@@ -84,6 +82,19 @@ contract Delegate is PartialDelegationTest {
     vm.stopPrank();
     assertEq(tokenProxy.delegates(_actor), delegations);
     assertEq(tokenProxy.getVotes(_delegatee), _amount);
+  }
+
+  function testFuzz_DelegatesToZeroAddress(address _actor, uint256 _amount) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    PartialDelegation[] memory delegations = new PartialDelegation[](1);
+    delegations[0] = PartialDelegation(address(0), 1);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+    assertEq(tokenProxy.delegates(_actor), delegations);
+    assertEq(tokenProxy.balanceOf(_actor), _amount);
   }
 
   function testFuzz_DelegatesToTwoAddressesWithCorrectNumeratorSum(

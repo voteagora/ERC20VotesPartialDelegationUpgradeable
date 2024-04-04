@@ -143,6 +143,9 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     address _currentActor = _useActor(_delegators, _actorSeed);
     vm.prank(_currentActor);
     tokenProxy.delegate(address(0));
+
+    // technically address(0) is a delegatee now
+    _delegatees.add(address(0));
   }
 
   function handler_validNonZeroTransferToDelegator(uint256 _amount, uint256 _actorSeed, uint256 _delegatorSeed)

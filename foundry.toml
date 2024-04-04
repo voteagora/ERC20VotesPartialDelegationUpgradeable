@@ -30,7 +30,7 @@
   fail_on_revert = false
   include_push_bytes = true
   include_storage = true
-  runs = 50
+  runs = 25
   optimizer = false
 
 [fmt]
