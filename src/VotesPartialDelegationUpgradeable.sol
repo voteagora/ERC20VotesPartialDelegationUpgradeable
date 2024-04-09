@@ -256,7 +256,9 @@ abstract contract VotesPartialDelegationUpgradeable is
     uint256 _oldDelegateLength = _oldDelegations.length;
     address _lastDelegatee;
     for (uint256 i = 0; i < _newDelegations.length; i++) {
-      if (_newDelegations[i]._delegatee <= _lastDelegatee) {
+      if (i == 0 && _newDelegations[i]._delegatee == address(0)) {
+        // zero delegation is allowed if in 0th position
+      } else if (_newDelegations[i]._delegatee <= _lastDelegatee) {
         revert("VotesPartialDelegation: delegatees must be sorted with no duplicates");
       }
       if (i < _oldDelegateLength) {
@@ -266,15 +268,13 @@ abstract contract VotesPartialDelegationUpgradeable is
       }
       // keep track of last delegatee to ensure ordering / uniqueness
       _lastDelegatee = _newDelegations[i]._delegatee;
+      emit DelegateChanged(_account, _newDelegations[i]._delegatee, _newDelegations[i]._numerator);
     }
     if (_oldDelegateLength > _newDelegations.length) {
       for (uint256 i = _newDelegations.length; i < _oldDelegateLength; i++) {
         $._delegatees[_account].pop();
       }
     }
-
-    // TODO: emit event
-    // emit DelegateChanged(_account, oldDelegate, delegatee);
   }
 
   /**
@@ -305,8 +305,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     returns (DelegationAdjustment[] memory)
   {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-
-    // TODO: consider a no-op if from=to
     DelegationAdjustment[] memory _delegationAdjustments =
       new DelegationAdjustment[]($._delegatees[from].length + $._delegatees[to].length);
     if ($._delegatees[from].length > 0) {
@@ -318,7 +316,7 @@ abstract contract VotesPartialDelegationUpgradeable is
         _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from) - amount, Op.ADD /* unused */ );
 
       for (uint256 i = 0; i < _from.length; i++) {
-        // TODO: determine if remainder treatment is necessary (test says no)
+        // TODO: determine if remainder treatment is necessary (test says no, so we remove)
         // if (i != _from.length - 1) {
         _delegationAdjustments[i] = DelegationAdjustment({
           _delegatee: $._delegatees[from][i]._delegatee,
@@ -387,12 +385,19 @@ abstract contract VotesPartialDelegationUpgradeable is
   function _createDelegateCheckpoints(DelegationAdjustment[] memory _delegationAdjustments) internal {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     for (uint256 i = 0; i < _delegationAdjustments.length; i++) {
+      // if (_delegationAdjustments[i]._delegatee == address(0)) {
+      //   _push(
+      //     $._totalCheckpoints, _op(_delegationAdjustments[i]._op),
+      // SafeCast.toUint208(_delegationAdjustments[i]._amount)
+      //   );
+      // } else {
       (uint256 oldValue, uint256 newValue) = _push(
         $._delegateCheckpoints[_delegationAdjustments[i]._delegatee],
         _op(_delegationAdjustments[i]._op),
         SafeCast.toUint208(_delegationAdjustments[i]._amount)
       );
       emit DelegateVotesChanged(_delegationAdjustments[i]._delegatee, oldValue, newValue);
+      // }
     }
   }
 

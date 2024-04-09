@@ -23,6 +23,16 @@
   # Speed up compilation and tests during development.
   optimizer = false
 
+[invariant]
+  call_override = false
+  depth = 100
+  dictionary_weight = 80
+  fail_on_revert = false
+  include_push_bytes = true
+  include_storage = true
+  runs = 25
+  optimizer = false
+
 [fmt]
   bracket_spacing = false
   int_types = "long"
