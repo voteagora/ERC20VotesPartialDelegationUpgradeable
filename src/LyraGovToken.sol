@@ -2,15 +2,10 @@
 pragma solidity 0.8.24;
 
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {AccessControlDefaultAdminRulesUpgradeable} from
-  "@openzeppelin/contracts-upgradeable/access/extensions/AccessControlDefaultAdminRulesUpgradeable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {ERC20VotesPartialDelegationUpgradeable} from "src/ERC20VotesPartialDelegationUpgradeable.sol";
 
-contract LyraGovToken is
-  UUPSUpgradeable,
-  AccessControlDefaultAdminRulesUpgradeable,
-  ERC20VotesPartialDelegationUpgradeable
-{
+contract LyraGovToken is UUPSUpgradeable, AccessControlUpgradeable, ERC20VotesPartialDelegationUpgradeable {
   bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
   bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
 
@@ -20,8 +15,12 @@ contract LyraGovToken is
   }
 
   function initialize(address _admin) public initializer {
-    __ERC20_init("Lyra Gov Token", "LYRA");
-    __AccessControlDefaultAdminRules_init(3 days, _admin);
+    __ERC20_init("Lyra Governance Token", "gLyra");
+    __AccessControl_init();
+    if (_admin == address(0)) {
+      revert("Admin cannot be the zero address");
+    }
+    _grantRole(DEFAULT_ADMIN_ROLE, _admin);
   }
 
   function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
