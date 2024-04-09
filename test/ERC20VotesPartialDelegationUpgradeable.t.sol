@@ -10,7 +10,7 @@ contract PartialDelegationTest is Test {
   FakeERC20VotesPartialDelegationUpgradeable public tokenImpl;
   FakeERC20VotesPartialDelegationUpgradeable public tokenProxy;
 
-  function setUp() public {
+  function setUp() public virtual {
     tokenImpl = new FakeERC20VotesPartialDelegationUpgradeable();
     tokenProxy = FakeERC20VotesPartialDelegationUpgradeable(address(new ERC1967Proxy(address(tokenImpl), "")));
     tokenProxy.initialize();

@@ -106,14 +106,14 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     countCall("handler_mintAndDelegateSingle")
   {
     _amount = bound(_amount, 1, 100_000_000e18);
-    _holder = _boundToNonZeroAddress(_holder);
+    _holder = _chooseAddressNotInSet(_nondelegators, _holder);
     _delegatee = _boundToNonZeroAddress(_delegatee);
     _mintToken(_holder, _amount);
     vm.prank(_holder);
     tokenProxy.delegate(_delegatee);
     _holders.add(_holder);
-    _delegatees.add(_delegatee);
     _delegators.add(_holder);
+    _delegatees.add(_delegatee);
   }
 
   function handler_mintAndDelegateMulti(address _holder, uint256 _amount, uint256 _delegationSeed)
@@ -121,8 +121,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     countCall("handler_mintAndDelegateMulti")
   {
     _amount = bound(_amount, 1, 100_000_000e18);
-    _holder = _boundToNonZeroAddress(_holder);
-
+    _holder = _chooseAddressNotInSet(_nondelegators, _holder);
     _mintToken(_holder, _amount);
     // delegatees are added to the set in _createValidPartialDelegation
     PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
@@ -146,6 +145,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
 
     // technically address(0) is a delegatee now
     _delegatees.add(address(0));
+    // _currentActor is also still technically a delegator delegating to address(0), so we won't add to nondelegates set
   }
 
   function handler_validNonZeroTransferToDelegator(uint256 _amount, uint256 _actorSeed, uint256 _delegatorSeed)
@@ -153,7 +153,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     countCall("validNonZeroTransferToDelegator")
   {
     address _currentActor = _useActor(_holders, _actorSeed);
-    _amount = bound(_amount, 1, tokenProxy.balanceOf(_currentActor));
+    _amount = bound(_amount, 0, tokenProxy.balanceOf(_currentActor));
     address _to = _useActor(_delegators, _delegatorSeed);
     vm.prank(_currentActor);
     tokenProxy.transfer(_to, _amount);
@@ -164,10 +164,10 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     countCall("validNonZeroTransferToNonD")
   {
     address _currentActor = _useActor(_holders, _actorSeed);
-    _amount = bound(_amount, 1, tokenProxy.balanceOf(_currentActor));
+    _amount = bound(_amount, 0, tokenProxy.balanceOf(_currentActor));
     _to = _chooseAddressNotInSet(_delegators, _to);
     vm.startPrank(_currentActor);
-    tokenProxy.transfer(_to, 1);
+    tokenProxy.transfer(_to, _amount);
     vm.stopPrank();
 
     // now, receiving address is a token holder; add them to the set
