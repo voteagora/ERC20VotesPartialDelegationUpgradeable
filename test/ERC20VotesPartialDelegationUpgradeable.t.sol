@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.24;
 
-import {Test, console} from "forge-std/Test.sol";
+import {Test, console, StdStorage, stdStorage} from "forge-std/Test.sol";
 import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
@@ -9,6 +9,10 @@ import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 contract PartialDelegationTest is Test {
   FakeERC20VotesPartialDelegationUpgradeable public tokenImpl;
   FakeERC20VotesPartialDelegationUpgradeable public tokenProxy;
+  // console2.log(uint(_domainSeparatorV4()))
+  bytes32 EIP712_DOMAIN_SEPARATOR = bytes32(
+    uint256(100_633_074_474_716_574_740_463_121_786_372_643_260_815_419_814_134_837_433_071_979_637_462_873_547_660)
+  );
 
   function setUp() public virtual {
     tokenImpl = new FakeERC20VotesPartialDelegationUpgradeable();
@@ -22,6 +26,17 @@ contract PartialDelegationTest is Test {
       assertEq(a[i]._delegatee, b[i]._delegatee, "delegatee mismatch");
       assertEq(a[i]._numerator, b[i]._numerator, "numerator mismatch");
     }
+  }
+
+  function _mint(address _to, uint256 _amount) internal {
+    vm.prank(_to);
+    tokenProxy.mint(_amount);
+  }
+
+  function _createSingleFullDelegation(address _delegatee) internal view returns (PartialDelegation[] memory) {
+    PartialDelegation[] memory delegations = new PartialDelegation[](1);
+    delegations[0] = PartialDelegation(_delegatee, tokenProxy.DENOMINATOR());
+    return delegations;
   }
 
   function _createValidPartialDelegation(uint256 _n, uint256 _seed) internal view returns (PartialDelegation[] memory) {
@@ -53,6 +68,11 @@ contract PartialDelegationTest is Test {
       _totalNumerator += _numerator;
     }
     return delegations;
+  }
+
+  function _sign(uint256 _privateKey, bytes32 _messageHash) internal pure returns (bytes memory) {
+    (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_privateKey, _messageHash);
+    return abi.encodePacked(_r, _s, _v);
   }
 }
 
@@ -303,7 +323,72 @@ contract Delegate is PartialDelegationTest {
   }
 }
 
-contract DelegateBySig is PartialDelegationTest {}
+contract DelegateLegacy is PartialDelegationTest {}
+
+contract DelegateBySig is PartialDelegationTest {
+  using stdStorage for StdStorage;
+
+  function testFuzz_DelegatesSuccessfully(
+    address _actor,
+    uint256 _delegatorPrivateKey,
+    address _delegatee,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _deadline
+  ) public {
+    vm.assume(_actor != address(0));
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    bytes32 _message = keccak256(abi.encode(tokenProxy.DELEGATION_TYPEHASH(), _delegatee, _currentNonce, _deadline));
+
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", EIP712_DOMAIN_SEPARATOR, _message));
+    (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_delegatorPrivateKey, _messageHash);
+    vm.prank(_actor);
+    tokenProxy.delegateBySig(_delegatee, _currentNonce, _deadline, _v, _r, _s);
+    assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
+    assertEq(tokenProxy.getVotes(_delegatee), _delegatorBalance);
+  }
+  // expired timestamp
+  // wrong nonce
+  // wrong signature
+}
+
+contract DelegateOnBehalf is PartialDelegationTest {
+  using stdStorage for StdStorage;
+
+  function testFuzz_DelegatesSuccessfully(
+    address _actor,
+    uint256 _delegatorPrivateKey,
+    uint256 _delegationSeed,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _deadline
+  ) public {
+    vm.assume(_actor != address(0));
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
+
+    bytes32 _message =
+      keccak256(abi.encode(tokenProxy.PARTIAL_DELEGATION_TYPEHASH(), _delegations, _currentNonce, _deadline));
+
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", EIP712_DOMAIN_SEPARATOR, _message));
+    bytes memory _signature = _sign(_delegatorPrivateKey, _messageHash);
+    vm.prank(_actor);
+    tokenProxy.delegateOnBehalf(_delegations, _currentNonce, _deadline, _signature);
+    assertEq(tokenProxy.delegates(_delegator), _delegations);
+  }
+}
 
 contract Transfer is PartialDelegationTest {
   function testFuzz_MovesVotesFromOneDelegateeSetToAnother(

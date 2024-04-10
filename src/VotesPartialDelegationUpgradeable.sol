@@ -41,7 +41,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 {
   using Checkpoints for Checkpoints.Trace208;
 
-  bytes32 private constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
+  bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
   bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
     keccak256("PartialDelegation(PartialDelegation[] delegations,uint256 nonce,uint256 expiry)");
   uint256 public constant MAX_PARTIAL_DELEGATIONS = 100;
