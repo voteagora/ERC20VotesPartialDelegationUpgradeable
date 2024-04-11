@@ -379,8 +379,11 @@ contract DelegateOnBehalf is PartialDelegationTest {
 
     PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
 
-    bytes32 _message =
-      keccak256(abi.encode(tokenProxy.PARTIAL_DELEGATION_TYPEHASH(), _delegations, _currentNonce, _deadline));
+    bytes32 _message = keccak256(
+      abi.encode(
+        tokenProxy.PARTIAL_DELEGATION_TYPEHASH(), keccak256(abi.encode(_delegations)), _currentNonce, _deadline
+      )
+    );
 
     bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", EIP712_DOMAIN_SEPARATOR, _message));
     bytes memory _signature = _sign(_delegatorPrivateKey, _messageHash);

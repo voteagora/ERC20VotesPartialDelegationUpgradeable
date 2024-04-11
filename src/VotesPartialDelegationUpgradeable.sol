@@ -12,7 +12,6 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Time} from "@openzeppelin/contracts/utils/types/Time.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
-import {console2} from "forge-std/console2.sol";
 
 /**
  * @dev This is a base abstract contract that tracks voting units, which are a measure of voting power that can be
@@ -42,8 +41,9 @@ abstract contract VotesPartialDelegationUpgradeable is
   using Checkpoints for Checkpoints.Trace208;
 
   bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
-  bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
-    keccak256("PartialDelegation(PartialDelegation[] delegations,uint256 nonce,uint256 expiry)");
+  bytes32 public constant PARTIAL_DELEGATION_TYPEHASH = keccak256(
+    "PartialDelegationOnBehalf(PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint256 numerator)"
+  );
   uint256 public constant MAX_PARTIAL_DELEGATIONS = 100;
   uint96 public constant DENOMINATOR = 10_000;
 
@@ -165,7 +165,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @dev Returns the delegate that `account` has chosen.
+   * @dev Returns the delegates that `account` has chosen.
    */
   function delegates(address account) public view virtual returns (PartialDelegation[] memory) {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
@@ -210,7 +210,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @dev Delegates votes from signer to `delegatee`.
+   * @dev Delegates votes from signer to `_partialDelegations`.
    */
   function delegateOnBehalf(
     PartialDelegation[] memory _partialDelegations,
@@ -223,7 +223,9 @@ abstract contract VotesPartialDelegationUpgradeable is
     }
     // TODO: prefer this, or isValidSignatureNow?
     address _signer = ECDSA.recover(
-      _hashTypedDataV4(keccak256(abi.encode(PARTIAL_DELEGATION_TYPEHASH, _partialDelegations, _nonce, _expiry))),
+      _hashTypedDataV4(
+        keccak256(abi.encode(PARTIAL_DELEGATION_TYPEHASH, keccak256(abi.encode(_partialDelegations)), _nonce, _expiry))
+      ),
       _signature
     );
     _useCheckedNonce(_signer, _nonce);
