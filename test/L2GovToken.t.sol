@@ -22,8 +22,8 @@ contract Initialize is L2GovTest {
     assertEq(tokenProxy.name(), "");
     assertEq(tokenProxy.symbol(), "");
     tokenProxy.initialize(_admin);
-    assertEq(tokenProxy.name(), "Lyra Gov Token");
-    assertEq(tokenProxy.symbol(), "LYRA");
+    assertEq(tokenProxy.name(), "Lyra Governance Token");
+    assertEq(tokenProxy.symbol(), "gLyra");
   }
 
   function test_RevertIf_InitializeTwice(address _admin) public {
