@@ -39,6 +39,7 @@ contract PartialDelegationTest is Test {
     return delegations;
   }
 
+  /// @dev
   function _createValidPartialDelegation(uint256 _n, uint256 _seed) internal view returns (PartialDelegation[] memory) {
     _seed = bound(
       _seed,
@@ -50,18 +51,12 @@ contract PartialDelegationTest is Test {
     PartialDelegation[] memory delegations = new PartialDelegation[](_n);
     uint96 _totalNumerator;
     for (uint256 i = 0; i < _n; i++) {
-      // TODO: determine if this numerator definition is correct (I think it's selecting `1` every time)
-      console.log(
-        _n,
-        i,
-        uint256(keccak256(abi.encode(_seed + i))) % tokenProxy.DENOMINATOR(),
-        tokenProxy.DENOMINATOR() - _totalNumerator - (_n - i)
-      );
       uint96 _numerator = uint96(
         bound(
-          uint256(keccak256(abi.encode(_seed + i))) % tokenProxy.DENOMINATOR(),
+          uint256(keccak256(abi.encode(_seed + i))) % tokenProxy.DENOMINATOR(), // initial value of the numerator
           1,
-          tokenProxy.DENOMINATOR() - _totalNumerator - (_n - i)
+          tokenProxy.DENOMINATOR() - _totalNumerator - (_n - i) // ensure that there is enough numerator left for the
+            // remaining delegations
         )
       );
       delegations[i] = PartialDelegation(address(uint160(uint160(vm.addr(_seed)) + i)), _numerator);
