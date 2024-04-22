@@ -20,11 +20,12 @@ contract DeployL2GovToken is Script {
   }
 
   function run() public virtual {
-    vm.broadcast(deployer.privateKey);
+    vm.startBroadcast(deployer.privateKey);
     L2GovToken token = new L2GovToken();
     console.log("L2GovToken impl:\t", address(token));
     proxy =
       L2GovToken(address(new ERC1967Proxy(address(token), abi.encodeWithSelector(token.initialize.selector, admin))));
     console.log("L2GovToken proxy:\t", address(proxy));
+    vm.stopBroadcast();
   }
 }
