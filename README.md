@@ -1,4 +1,5 @@
-## Lyra Governance Token
+## ERC20AdvancedDelegationVotes
+Based on OZ's [ERC20Votes](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/token/ERC20/extensions/ERC20Votes.sol),ERC20AdvancedDelegationVotes is an ERC20 token implementation that allows token holders to delegate to multiple delegates instead of just one.
 
 ### Build
 
