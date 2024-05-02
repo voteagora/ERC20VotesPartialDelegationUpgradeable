@@ -19,7 +19,7 @@ interface IVotesPartialDelegation {
   /**
    * @dev Emitted when an account changes their delegate.
    */
-  event DelegateChanged(address indexed delegator, address indexed newDelegate, uint96 numerator);
+  event DelegateChanged(address indexed delegator, address indexed delegatee, uint96 numerator);
 
   /**
    * @dev Emitted when a token transfer or delegate change results in changes to a delegate's number of voting units.
@@ -55,10 +55,10 @@ interface IVotesPartialDelegation {
   /**
    * @dev Delegates votes from the sender to `delegatee`.
    */
-  //   function delegate(address delegatee) external;
+  function delegate(address delegatee) external;
 
   /**
    * @dev Delegates votes from signer to `delegatee`.
    */
-  //   function delegateBySig(address delegatee, uint256 nonce, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external;
+  function delegateBySig(address delegatee, uint256 nonce, uint256 expiry, uint8 v, bytes32 r, bytes32 s) external;
 }
