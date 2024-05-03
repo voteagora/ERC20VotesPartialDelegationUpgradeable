@@ -12,6 +12,7 @@ contract FakeERC20VotesPartialDelegationUpgradeable is UUPSUpgradeable, ERC20Vot
 
   function initialize() public initializer {
     __ERC20_init("Fake Token", "FAKE");
+    __EIP712_init("Fake Token", "1");
   }
 
   function _authorizeUpgrade(address) internal override {}

@@ -10,14 +10,22 @@ contract PartialDelegationTest is Test {
   FakeERC20VotesPartialDelegationUpgradeable public tokenImpl;
   FakeERC20VotesPartialDelegationUpgradeable public tokenProxy;
   // console2.log(uint(_domainSeparatorV4()))
-  bytes32 EIP712_DOMAIN_SEPARATOR = bytes32(
-    uint256(100_633_074_474_716_574_740_463_121_786_372_643_260_815_419_814_134_837_433_071_979_637_462_873_547_660)
-  );
+  bytes32 DOMAIN_SEPARATOR;
 
   function setUp() public virtual {
     tokenImpl = new FakeERC20VotesPartialDelegationUpgradeable();
     tokenProxy = FakeERC20VotesPartialDelegationUpgradeable(address(new ERC1967Proxy(address(tokenImpl), "")));
     tokenProxy.initialize();
+    // TODO: try to build this with contract state rather than fixed values
+    DOMAIN_SEPARATOR = keccak256(
+      abi.encode(
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+        keccak256("Fake Token"),
+        keccak256("1"),
+        block.chainid,
+        address(tokenProxy)
+      )
+    );
   }
 
   function assertEq(PartialDelegation[] memory a, PartialDelegation[] memory b) public {
@@ -68,6 +76,12 @@ contract PartialDelegationTest is Test {
   function _sign(uint256 _privateKey, bytes32 _messageHash) internal pure returns (bytes memory) {
     (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_privateKey, _messageHash);
     return abi.encodePacked(_r, _s, _v);
+  }
+
+  function _hash(PartialDelegation memory partialDelegation) internal view returns (bytes32) {
+    return keccak256(
+      abi.encode(tokenProxy.PARTIAL_DELEGATION_TYPEHASH(), partialDelegation._delegatee, partialDelegation._numerator)
+    );
   }
 }
 
@@ -341,7 +355,7 @@ contract DelegateBySig is PartialDelegationTest {
 
     bytes32 _message = keccak256(abi.encode(tokenProxy.DELEGATION_TYPEHASH(), _delegatee, _currentNonce, _deadline));
 
-    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", EIP712_DOMAIN_SEPARATOR, _message));
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
     (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_delegatorPrivateKey, _messageHash);
     vm.prank(_actor);
     tokenProxy.delegateBySig(_delegatee, _currentNonce, _deadline, _v, _r, _s);
@@ -374,13 +388,21 @@ contract DelegateOnBehalf is PartialDelegationTest {
 
     PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
 
+    bytes32[] memory _payload = new bytes32[](_delegations.length);
+    for (uint256 i; i < _delegations.length; i++) {
+      _payload[i] = _hash(_delegations[i]);
+    }
+
     bytes32 _message = keccak256(
       abi.encode(
-        tokenProxy.PARTIAL_DELEGATION_TYPEHASH(), keccak256(abi.encode(_delegations)), _currentNonce, _deadline
+        tokenProxy.PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH(),
+        keccak256(abi.encodePacked(_payload)),
+        _currentNonce,
+        _deadline
       )
     );
 
-    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", EIP712_DOMAIN_SEPARATOR, _message));
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
     bytes memory _signature = _sign(_delegatorPrivateKey, _messageHash);
     vm.prank(_actor);
     tokenProxy.delegateOnBehalf(_delegations, _currentNonce, _deadline, _signature);
