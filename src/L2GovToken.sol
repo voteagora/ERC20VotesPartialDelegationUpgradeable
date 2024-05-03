@@ -20,6 +20,7 @@ contract L2GovToken is
 
     function initialize(address _admin) public initializer {
         __ERC20_init("L2 Governance Token", "gL2");
+        __EIP712_init("L2 Governance Token", "1");
         __AccessControl_init();
         if (_admin == address(0)) {
             revert("Admin cannot be the zero address");

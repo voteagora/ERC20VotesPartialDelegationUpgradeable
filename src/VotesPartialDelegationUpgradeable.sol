@@ -41,9 +41,11 @@ abstract contract VotesPartialDelegationUpgradeable is
   using Checkpoints for Checkpoints.Trace208;
 
   bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
-  bytes32 public constant PARTIAL_DELEGATION_TYPEHASH = keccak256(
-    "PartialDelegationOnBehalf(PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint256 numerator)"
+  bytes32 public constant PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH = keccak256(
+    "PartialDelegationOnBehalf(PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
   );
+  bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
+    keccak256("PartialDelegation(address delegatee,uint96 numerator)");
   uint256 public constant MAX_PARTIAL_DELEGATIONS = 100;
   uint96 public constant DENOMINATOR = 10_000;
 
@@ -222,9 +224,20 @@ abstract contract VotesPartialDelegationUpgradeable is
       revert VotesExpiredSignature(_expiry);
     }
     // TODO: prefer this, or isValidSignatureNow?
+    bytes32[] memory _partialDelegationsPayload = new bytes32[](_partialDelegations.length);
+    for (uint256 i = 0; i < _partialDelegations.length; i++) {
+      _partialDelegationsPayload[i] = _hash(_partialDelegations[i]);
+    }
     address _signer = ECDSA.recover(
       _hashTypedDataV4(
-        keccak256(abi.encode(PARTIAL_DELEGATION_TYPEHASH, keccak256(abi.encode(_partialDelegations)), _nonce, _expiry))
+        keccak256(
+          abi.encode(
+            PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH,
+            keccak256(abi.encodePacked(_partialDelegationsPayload)),
+            _nonce,
+            _expiry
+          )
+        )
       ),
       _signature
     );
@@ -482,6 +495,11 @@ abstract contract VotesPartialDelegationUpgradeable is
 
   function _operation(Op op) internal pure returns (function(uint208, uint208) view returns (uint208)) {
     return op == Op.ADD ? _add : _subtract;
+  }
+
+  function _hash(PartialDelegation memory partialDelegation) internal pure returns (bytes32) {
+    return
+      keccak256(abi.encode(PARTIAL_DELEGATION_TYPEHASH, partialDelegation._delegatee, partialDelegation._numerator));
   }
 
   /**
