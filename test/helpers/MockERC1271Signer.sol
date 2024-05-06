@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.24;
+
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 
 contract MockERC1271Signer is IERC1271 {
