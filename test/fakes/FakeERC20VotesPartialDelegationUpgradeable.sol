@@ -21,3 +21,12 @@ contract FakeERC20VotesPartialDelegationUpgradeable is UUPSUpgradeable, ERC20Vot
     _mint(msg.sender, _amount);
   }
 }
+
+/// @notice Interface of the ERC1271 standard signature validation method for contracts as defined
+/// in https://eips.ethereum.org/EIPS/eip-1271[ERC-1271].
+interface IERC1271 {
+  /// @notice Should return whether the signature provided is valid for the provided data
+  /// @param hash Hash of the data to be signed
+  /// @param signature Signature byte array associated with _data
+  function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4 magicValue);
+}

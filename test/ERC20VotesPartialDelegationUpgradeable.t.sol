@@ -2,7 +2,9 @@
 pragma solidity 0.8.24;
 
 import {Test, console, StdStorage, stdStorage} from "forge-std/Test.sol";
-import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
+import {
+  FakeERC20VotesPartialDelegationUpgradeable, IERC1271
+} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 
@@ -362,6 +364,37 @@ contract DelegateBySig is PartialDelegationTest {
     assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
     assertEq(tokenProxy.getVotes(_delegatee), _delegatorBalance);
   }
+
+  function testFuzz_DelegatesSuccessfullyUsingAValid1271Signature(
+    address _actor,
+    uint256 _delegatorPrivateKey,
+    address _delegatee,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _deadline
+  ) public {
+    vm.assume(_actor != address(0));
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    bytes32 _message = keccak256(abi.encode(tokenProxy.DELEGATION_TYPEHASH(), _delegatee, _currentNonce, _deadline));
+
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
+    (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_delegatorPrivateKey, _messageHash);
+
+    MockERC1271Signer mockRegistrant = new MockERC1271Signer();
+    mockRegistrant.setResponse__isValidSignature(true);
+
+    vm.prank(mockRegistrant);
+
+    tokenProxy.delegateBySig(_delegatee, _currentNonce, _deadline, _v, _r, _s);
+    assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
+    assertEq(tokenProxy.getVotes(_delegatee), _delegatorBalance);
+  }
   // expired timestamp
   // wrong nonce
   // wrong signature
@@ -526,5 +559,29 @@ contract Integration is PartialDelegationTest {
     uint256 _amount
   ) public {
     vm.skip(true);
+  }
+}
+
+contract MockERC1271Signer is IERC1271 {
+  bytes4 public constant MAGICVALUE = 0x1626ba7e;
+  bytes4 public response__isValidSignature;
+
+  function setResponse__isValidSignature(bool _nextResponse) external {
+    if (_nextResponse) {
+      // If the mock should signal the signature is valid, it should return the MAGICVALUE
+      response__isValidSignature = MAGICVALUE;
+    } else {
+      // If the mock should signal it is not valid, we'll return an arbitrary four bytes derived
+      // from the address where the mock happens to be deployed
+      response__isValidSignature = bytes4(keccak256(abi.encode(address(this))));
+    }
+  }
+
+  function isValidSignature(bytes32, /* hash */ bytes memory /* signature */ )
+    external
+    view
+    returns (bytes4 magicValue)
+  {
+    magicValue = response__isValidSignature;
   }
 }

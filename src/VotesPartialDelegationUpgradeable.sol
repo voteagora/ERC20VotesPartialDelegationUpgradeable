@@ -40,6 +40,9 @@ abstract contract VotesPartialDelegationUpgradeable is
 {
   using Checkpoints for Checkpoints.Trace208;
 
+  /// @notice Emitted when an invalid signature is provided.
+  error InvalidSignature();
+
   bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
   bytes32 public constant PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH = keccak256(
     "PartialDelegationOnBehalf(PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
@@ -228,19 +231,46 @@ abstract contract VotesPartialDelegationUpgradeable is
     for (uint256 i = 0; i < _partialDelegations.length; i++) {
       _partialDelegationsPayload[i] = _hash(_partialDelegations[i]);
     }
-    address _signer = ECDSA.recover(
-      _hashTypedDataV4(
-        keccak256(
-          abi.encode(
-            PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH,
-            keccak256(abi.encodePacked(_partialDelegationsPayload)),
-            _nonce,
-            _expiry
+
+    address _signer;
+    if (_signature.length == 65) {
+      _signer = ECDSA.recover(
+        _hashTypedDataV4(
+          keccak256(
+            abi.encode(
+              PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH,
+              keccak256(abi.encodePacked(_partialDelegationsPayload)),
+              _nonce,
+              _expiry
+            )
           )
-        )
-      ),
-      _signature
-    );
+        ),
+        _signature
+      );
+    }
+    if (
+      (
+        (_signer == address(0))
+          && (
+            IERC1271(_signer).isValidSignature(
+              _hashTypedDataV4(
+                keccak256(
+                  abi.encode(
+                    PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH,
+                    keccak256(abi.encodePacked(_partialDelegationsPayload)),
+                    _nonce,
+                    _expiry
+                  )
+                )
+              ),
+              _signature
+            ) != IERC1271.isValidSignature.selector
+          )
+      )
+    ) {
+      revert InvalidSignature();
+    }
+
     _useCheckedNonce(_signer, _nonce);
     _delegate(_signer, _partialDelegations);
   }
@@ -506,4 +536,13 @@ abstract contract VotesPartialDelegationUpgradeable is
    * @dev Must return the voting units held by an account.
    */
   function _getVotingUnits(address) internal view virtual returns (uint256);
+}
+
+/// @notice Interface of the ERC1271 standard signature validation method for contracts as defined
+/// in https://eips.ethereum.org/EIPS/eip-1271[ERC-1271].
+interface IERC1271 {
+  /// @notice Should return whether the signature provided is valid for the provided data
+  /// @param hash Hash of the data to be signed
+  /// @param signature Signature byte array associated with _data
+  function isValidSignature(bytes32 hash, bytes memory signature) external view returns (bytes4 magicValue);
 }
