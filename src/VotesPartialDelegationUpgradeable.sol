@@ -45,7 +45,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
   bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
   bytes32 public constant PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH = keccak256(
-    "PartialDelegationOnBehalf(PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
+    "PartialDelegationOnBehalf(address delegator,PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
   );
   bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
     keccak256("PartialDelegation(address delegatee,uint96 numerator)");
@@ -219,6 +219,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    */
   function delegateOnBehalf(
     PartialDelegation[] memory _partialDelegations,
+    address _delegator,
     uint256 _nonce,
     uint256 _expiry,
     bytes calldata _signature
@@ -239,6 +240,7 @@ abstract contract VotesPartialDelegationUpgradeable is
           keccak256(
             abi.encode(
               PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH,
+              _delegator,
               keccak256(abi.encodePacked(_partialDelegationsPayload)),
               _nonce,
               _expiry
@@ -252,11 +254,12 @@ abstract contract VotesPartialDelegationUpgradeable is
       (
         (_signer == address(0))
           && (
-            IERC1271(_signer).isValidSignature(
+            IERC1271(_delegator).isValidSignature(
               _hashTypedDataV4(
                 keccak256(
                   abi.encode(
                     PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH,
+                    _delegator,
                     keccak256(abi.encodePacked(_partialDelegationsPayload)),
                     _nonce,
                     _expiry
