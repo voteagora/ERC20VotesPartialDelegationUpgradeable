@@ -439,39 +439,25 @@ abstract contract VotesPartialDelegationUpgradeable is
 
     // We'll need to adjust the delegatee votes for both "from" and "to" delegatee sets.
     if ($._delegatees[from].length > 0) {
-      DelegationAdjustment[] memory _from = _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from));
-      DelegationAdjustment[] memory _fromNew =
+      (DelegationAdjustment[] memory _from, uint256 _remainderOld) =
+        _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from));
+      (DelegationAdjustment[] memory _fromNew, uint256 _remainderNew) =
         _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from) - amount);
 
       for (uint256 i = 0; i < _from.length; i++) {
-        if (i != _from.length - 1) {
           _delegationAdjustmentsFrom[i] = DelegationAdjustment({
             _delegatee: $._delegatees[from][i]._delegatee,
             _amount: _from[i]._amount - _fromNew[i]._amount
           });
-        } else {
-          // special treatment of remainder delegatee
-          Op _op;
-          uint208 _amount;
-          if (_fromNew[i]._amount == _from[i]._amount) {
-            continue;
-          } else if (_fromNew[i]._amount > _from[i]._amount) {
-            _op = Op.ADD;
-            _amount = _fromNew[i]._amount - _from[i]._amount;
-          } else {
-            _op = Op.SUBTRACT;
-            _amount = _from[i]._amount - _fromNew[i]._amount;
-          }
-          _delegationAdjustmentsFrom[i] =
-            DelegationAdjustment({_delegatee: $._delegatees[from][i]._delegatee, _amount: _amount});
-        }
-      }
     }
 
     if ($._delegatees[to].length > 0) {
-      DelegationAdjustment[] memory _to = _calculateWeightDistribution($._delegatees[to], _getVotingUnits(to));
-      DelegationAdjustment[] memory _toNew =
+      (DelegationAdjustment[] memory _to, uint256 _remainderOld) =
+        _calculateWeightDistribution($._delegatees[to], _getVotingUnits(to));
+      (DelegationAdjustment[] memory _toNew, uint256 _remainderNew) =
         _calculateWeightDistribution($._delegatees[to], amount + _getVotingUnits(to));
+
+      _remainderTo = int256(_remainderNew) - int256(_remainderOld);
 
       for (uint256 i = 0; i < _to.length; i++) {
         if (i < _to.length - 1) {
@@ -499,7 +485,9 @@ abstract contract VotesPartialDelegationUpgradeable is
         }
       }
     }
-    _aggregateDelegationAdjustmentsAndCreateCheckpoints(_delegationAdjustmentsFrom, _delegationAdjustmentsTo);
+    _aggregateDelegationAdjustmentsAndCreateCheckpoints(
+      _delegationAdjustmentsFrom, _delegationAdjustmentsTo, _remainderFrom, _remainderTo
+    );
   }
 
   /// @notice Internal helper to calculate vote weights from a list of delegations.
