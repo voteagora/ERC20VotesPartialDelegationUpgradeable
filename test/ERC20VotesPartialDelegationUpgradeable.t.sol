@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 import {Test, console, StdStorage, stdStorage} from "forge-std/Test.sol";
 import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
+import {MockERC1271Signer} from "./helpers/MockERC1271Signer.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 
@@ -396,6 +397,7 @@ contract DelegateOnBehalf is PartialDelegationTest {
     bytes32 _message = keccak256(
       abi.encode(
         tokenProxy.PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH(),
+        _delegator,
         keccak256(abi.encodePacked(_payload)),
         _currentNonce,
         _deadline
@@ -405,7 +407,38 @@ contract DelegateOnBehalf is PartialDelegationTest {
     bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
     bytes memory _signature = _sign(_delegatorPrivateKey, _messageHash);
     vm.prank(_actor);
-    tokenProxy.delegateOnBehalf(_delegations, _currentNonce, _deadline, _signature);
+    tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
+    assertEq(tokenProxy.delegates(_delegator), _delegations);
+  }
+
+  function testFuzz_DelegatesSuccessfullyViaERC1271Signer(
+    address _actor,
+    uint256 _delegationSeed,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _deadline,
+    bytes memory _signature
+  ) public {
+    vm.assume(_actor != address(0));
+    MockERC1271Signer _erc1271Signer = new MockERC1271Signer();
+    _erc1271Signer.setResponse__isValidSignature(true);
+    address _delegator = address(_erc1271Signer);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(address(_delegator)).checked_write(
+      _currentNonce
+    );
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
+
+    bytes32[] memory _payload = new bytes32[](_delegations.length);
+    for (uint256 i; i < _delegations.length; i++) {
+      _payload[i] = _hash(_delegations[i]);
+    }
+
+    vm.prank(_actor);
+    tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
     assertEq(tokenProxy.delegates(_delegator), _delegations);
   }
 }

@@ -12,6 +12,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Time} from "@openzeppelin/contracts/utils/types/Time.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
+import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
 /**
  * @dev This is a base abstract contract that tracks voting units, which are a measure of voting power that can be
@@ -40,9 +41,12 @@ abstract contract VotesPartialDelegationUpgradeable is
 {
   using Checkpoints for Checkpoints.Trace208;
 
+  /// @notice Emitted when an invalid signature is provided.
+  error InvalidSignature();
+
   bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
   bytes32 public constant PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH = keccak256(
-    "PartialDelegationOnBehalf(PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
+    "PartialDelegationOnBehalf(address delegator,PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
   );
   bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
     keccak256("PartialDelegation(address delegatee,uint96 numerator)");
@@ -215,6 +219,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    * @dev Delegates votes from signer to `_partialDelegations`.
    */
   function delegateOnBehalf(
+    address _delegator,
     PartialDelegation[] memory _partialDelegations,
     uint256 _nonce,
     uint256 _expiry,
@@ -223,16 +228,18 @@ abstract contract VotesPartialDelegationUpgradeable is
     if (block.timestamp > _expiry) {
       revert VotesExpiredSignature(_expiry);
     }
-    // TODO: prefer this, or isValidSignatureNow?
     bytes32[] memory _partialDelegationsPayload = new bytes32[](_partialDelegations.length);
     for (uint256 i = 0; i < _partialDelegations.length; i++) {
       _partialDelegationsPayload[i] = _hash(_partialDelegations[i]);
     }
-    address _signer = ECDSA.recover(
+
+    bool _isValidSignature = SignatureChecker.isValidSignatureNow(
+      _delegator,
       _hashTypedDataV4(
         keccak256(
           abi.encode(
             PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH,
+            _delegator,
             keccak256(abi.encodePacked(_partialDelegationsPayload)),
             _nonce,
             _expiry
@@ -241,8 +248,12 @@ abstract contract VotesPartialDelegationUpgradeable is
       ),
       _signature
     );
-    _useCheckedNonce(_signer, _nonce);
-    _delegate(_signer, _partialDelegations);
+
+    if (!_isValidSignature) {
+      revert InvalidSignature();
+    }
+    _useCheckedNonce(_delegator, _nonce);
+    _delegate(_delegator, _partialDelegations);
   }
 
   /**
