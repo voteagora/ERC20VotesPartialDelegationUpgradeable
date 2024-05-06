@@ -12,6 +12,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Time} from "@openzeppelin/contracts/utils/types/Time.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
+import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
 
 /**
  * @dev This is a base abstract contract that tracks voting units, which are a measure of voting power that can be
@@ -218,8 +219,8 @@ abstract contract VotesPartialDelegationUpgradeable is
    * @dev Delegates votes from signer to `_partialDelegations`.
    */
   function delegateOnBehalf(
-    PartialDelegation[] memory _partialDelegations,
     address _delegator,
+    PartialDelegation[] memory _partialDelegations,
     uint256 _nonce,
     uint256 _expiry,
     bytes calldata _signature
@@ -227,55 +228,32 @@ abstract contract VotesPartialDelegationUpgradeable is
     if (block.timestamp > _expiry) {
       revert VotesExpiredSignature(_expiry);
     }
-    // TODO: prefer this, or isValidSignatureNow?
     bytes32[] memory _partialDelegationsPayload = new bytes32[](_partialDelegations.length);
     for (uint256 i = 0; i < _partialDelegations.length; i++) {
       _partialDelegationsPayload[i] = _hash(_partialDelegations[i]);
     }
 
-    address _signer;
-    if (_signature.length == 65) {
-      _signer = ECDSA.recover(
-        _hashTypedDataV4(
-          keccak256(
-            abi.encode(
-              PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH,
-              _delegator,
-              keccak256(abi.encodePacked(_partialDelegationsPayload)),
-              _nonce,
-              _expiry
-            )
+    bool _isValidSignature = SignatureChecker.isValidSignatureNow(
+      _delegator,
+      _hashTypedDataV4(
+        keccak256(
+          abi.encode(
+            PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH,
+            _delegator,
+            keccak256(abi.encodePacked(_partialDelegationsPayload)),
+            _nonce,
+            _expiry
           )
-        ),
-        _signature
-      );
-    }
-    if (
-      (
-        (_signer == address(0))
-          && (
-            IERC1271(_delegator).isValidSignature(
-              _hashTypedDataV4(
-                keccak256(
-                  abi.encode(
-                    PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH,
-                    _delegator,
-                    keccak256(abi.encodePacked(_partialDelegationsPayload)),
-                    _nonce,
-                    _expiry
-                  )
-                )
-              ),
-              _signature
-            ) != IERC1271.isValidSignature.selector
-          )
-      )
-    ) {
+        )
+      ),
+      _signature
+    );
+
+    if (!_isValidSignature) {
       revert InvalidSignature();
     }
-
-    _useCheckedNonce(_signer, _nonce);
-    _delegate(_signer, _partialDelegations);
+    _useCheckedNonce(_delegator, _nonce);
+    _delegate(_delegator, _partialDelegations);
   }
 
   /**
