@@ -255,7 +255,6 @@ contract Delegate is PartialDelegationTest {
     _n = newDelegations.length;
     for (uint256 i = 0; i < _n; i++) {
       if (i == _n - 1) {
-        console.log("last voter...");
         assertEq(
           tokenProxy.getVotes(newDelegations[i]._delegatee), _amount - _totalVotes, "last voter has wrong vote amount"
         );
@@ -674,7 +673,6 @@ contract Transfer is PartialDelegationTest {
     uint256 _toTotal = 0;
     for (uint256 i = 0; i < _toDelegations.length; i++) {
       if (i == _toDelegations.length - 1) {
-        console.log("last voter...");
         assertEq(
           tokenProxy.getVotes(_toDelegations[i]._delegatee),
           _toExistingBalance + _amount - _toTotal,
@@ -718,7 +716,6 @@ contract Transfer is PartialDelegationTest {
     uint256 _total = 0;
     for (uint256 i = 0; i < _delegations.length; i++) {
       if (i == _delegations.length - 1) {
-        console.log("last voter...");
         assertEq(
           tokenProxy.getVotes(_delegations[i]._delegatee), _existingBalance - _total, "last voter has wrong vote amount"
         );
