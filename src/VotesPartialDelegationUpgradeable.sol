@@ -291,6 +291,7 @@ abstract contract VotesPartialDelegationUpgradeable is
     // The rest of this method body replaces in storage the old delegatees with the new ones.
     // keep track of last delegatee to ensure ordering / uniqueness
     address _lastDelegatee;
+    PartialDelegation[] memory _oldDelegates = $._delegatees[_delegator];
 
     for (uint256 i = 0; i < _newDelegations.length; i++) {
       // check sorting and uniqueness
@@ -309,12 +310,38 @@ abstract contract VotesPartialDelegationUpgradeable is
         $._delegatees[_delegator].push(_newDelegations[i]);
       }
       _lastDelegatee = _newDelegations[i]._delegatee;
-      emit DelegateChanged(_delegator, _newDelegations[i]._delegatee, _newDelegations[i]._numerator);
     }
     // remove any remaining old delegatees
     if (_oldDelegateLength > _newDelegations.length) {
       for (uint256 i = _newDelegations.length; i < _oldDelegateLength; i++) {
         $._delegatees[_delegator].pop();
+      }
+    }
+    // emit events
+    _emitDelegationEvents(_delegator, _oldDelegates, _newDelegations);
+  }
+
+  function _emitDelegationEvents(address _delegator, PartialDelegation[] memory _old, PartialDelegation[] memory _new)
+    internal
+    virtual
+  {
+    uint256 i;
+    uint256 j;
+    while (i < _old.length || j < _new.length) {
+      console2.log("i:", i, "j:", j);
+      console2.log("_old.length:", _old.length, "_new.length:", _new.length);
+      if (i < _old.length && j < _new.length && _old[i]._delegatee == _new[j]._delegatee) {
+        if (_old[i]._numerator != _new[j]._numerator) {
+          emit DelegateChanged(_delegator, _new[j]._delegatee, _new[j]._numerator);
+          i++;
+          j++;
+        }
+      } else if (j == _new.length || i != _old.length && _old[i]._delegatee < _new[j]._delegatee) {
+        emit DelegateChanged(_delegator, _old[i]._delegatee, 0);
+        i++;
+      } else {
+        emit DelegateChanged(_delegator, _new[j]._delegatee, _new[j]._numerator);
+        j++;
       }
     }
   }
