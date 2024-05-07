@@ -328,8 +328,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     uint256 i;
     uint256 j;
     while (i < _old.length || j < _new.length) {
-      console2.log("i:", i, "j:", j);
-      console2.log("_old.length:", _old.length, "_new.length:", _new.length);
       if (i < _old.length && j < _new.length && _old[i]._delegatee == _new[j]._delegatee) {
         if (_old[i]._numerator != _new[j]._numerator) {
           emit DelegateChanged(_delegator, _new[j]._delegatee, _new[j]._numerator);
@@ -364,8 +362,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     bool _handledRemainderTo;
     address _remainderFrom = _old.length > 0 ? _old[_old.length - 1]._delegatee : address(0);
     address _remainderTo = _new.length > 0 ? _new[_new.length - 1]._delegatee : address(0);
-    console2.log("remainderFrom:", _remainderFromVotes);
-    console2.log("remainderTo", _remainderToVotes);
     while (i < _old.length || j < _new.length) {
       DelegationAdjustment memory _delegationAdjustment;
       Op _op;
@@ -412,16 +408,13 @@ abstract contract VotesPartialDelegationUpgradeable is
       int256 _voteAdj =
         _op == Op.ADD ? int256(uint256(_delegationAdjustment._amount)) : -int256(uint256(_delegationAdjustment._amount));
       if (!_handledRemainderFrom && _delegationAdjustment._delegatee == _remainderFrom) {
-        console2.log("handling remainder from");
         _handledRemainderFrom = true;
         // take the existing vote adjustment and add (or subtract) the remainderFromVotes
         _voteAdj -= _remainderFromVotes;
         if (_remainderFrom == _remainderTo) {
-          console2.log("remainderFrom and To are the same");
           _handledRemainderTo = true;
           _voteAdj += _remainderToVotes;
         }
-        console2.log(_voteAdj);
         if (_voteAdj > 0) {
           _op = Op.ADD;
           _delegationAdjustment._amount = uint208(uint256(_voteAdj));
@@ -431,10 +424,8 @@ abstract contract VotesPartialDelegationUpgradeable is
         }
       }
       if (!_handledRemainderTo && _delegationAdjustment._delegatee == _remainderTo) {
-        console2.log("handling remainder to");
         _handledRemainderTo = true;
         _voteAdj += _remainderToVotes;
-        console2.log(_voteAdj);
         if (_voteAdj > 0) {
           _op = Op.ADD;
           _delegationAdjustment._amount = uint208(uint256(_voteAdj));
@@ -458,15 +449,12 @@ abstract contract VotesPartialDelegationUpgradeable is
     DelegationAdjustment memory _delegationAdjustment;
     Op _op;
     if (!_handledRemainderFrom) {
-      console2.log("handling remainder from in final iteration");
       _handledRemainderFrom = true;
       int256 _voteAdj = -_remainderFromVotes;
       if (_remainderFrom == _remainderTo) {
-        console2.log("remainderFrom and To are the same");
         _handledRemainderTo = true;
         _voteAdj = _voteAdj + _remainderToVotes;
       }
-      console2.log(_voteAdj);
       if (_voteAdj > 0) {
         _op = Op.ADD;
         _delegationAdjustment._amount = uint208(uint256(_voteAdj));
@@ -482,10 +470,8 @@ abstract contract VotesPartialDelegationUpgradeable is
       }
     }
     if (!_handledRemainderTo) {
-      console2.log("handling remainder to in final iteration");
       _handledRemainderTo = true;
       int256 _voteAdj = _remainderToVotes;
-      console2.log(_voteAdj);
       _op = Op.ADD;
       _delegationAdjustment._amount = uint208(uint256(_voteAdj));
       if (_voteAdj != 0) {
