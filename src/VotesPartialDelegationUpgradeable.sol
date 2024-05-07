@@ -54,7 +54,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
     keccak256("PartialDelegation(address delegatee,uint96 numerator)");
   /// @notice Max # of partial delegations that can be specified in a partial delegation set.
-  uint256 public constant MAX_PARTIAL_DELEGATIONS = 10;
+  uint256 public constant MAX_PARTIAL_DELEGATIONS = 100;
   /// @notice Denominator of a partial delegation fraction.
   uint96 public constant DENOMINATOR = 10_000;
 
@@ -533,10 +533,10 @@ abstract contract VotesPartialDelegationUpgradeable is
           })
         );
       }
-      _aggregateDelegationAdjustmentsAndCreateCheckpoints(
-        _delegationAdjustmentsFrom, _delegationAdjustmentsTo, _remainderFrom, _remainderTo
-      );
     }
+    _aggregateDelegationAdjustmentsAndCreateCheckpoints(
+      _delegationAdjustmentsFrom, _delegationAdjustmentsTo, _remainderFrom, _remainderTo
+    );
   }
 
   /// @notice Internal helper to calculate vote weights from a list of delegations.
