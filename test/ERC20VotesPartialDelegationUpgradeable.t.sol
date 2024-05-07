@@ -8,6 +8,13 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 
 contract PartialDelegationTest is Test {
+  /// @notice Emitted when an invalid signature is provided.
+  error InvalidSignature();
+  /// @dev The nonce used for an `account` is not the expected current nonce.
+  error InvalidAccountNonce(address account, uint256 currentNonce);
+  /// @dev The signature used has expired.
+  error VotesExpiredSignature(uint256 expiry);
+
   FakeERC20VotesPartialDelegationUpgradeable public tokenImpl;
   FakeERC20VotesPartialDelegationUpgradeable public tokenProxy;
   // console2.log(uint(_domainSeparatorV4()))
@@ -371,7 +378,7 @@ contract DelegateBySig is PartialDelegationTest {
 contract DelegateOnBehalf is PartialDelegationTest {
   using stdStorage for StdStorage;
 
-  function testFuzz_DelegatesSuccessfully(
+  function testFuzz_DelegatesSuccessfullyViaERC712Signer(
     address _actor,
     uint256 _delegatorPrivateKey,
     uint256 _delegationSeed,
@@ -440,6 +447,194 @@ contract DelegateOnBehalf is PartialDelegationTest {
     vm.prank(_actor);
     tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
     assertEq(tokenProxy.delegates(_delegator), _delegations);
+  }
+
+  function testFuzz_RevertIf_DelegatesViaERC712SignerWithWrongNonce(
+    address _actor,
+    uint256 _delegatorPrivateKey,
+    uint256 _delegationSeed,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _suppliedNonce,
+    uint256 _deadline
+  ) public {
+    vm.assume(_actor != address(0));
+    vm.assume(_suppliedNonce != _currentNonce);
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
+
+    bytes32[] memory _payload = new bytes32[](_delegations.length);
+    for (uint256 i; i < _delegations.length; i++) {
+      _payload[i] = _hash(_delegations[i]);
+    }
+
+    bytes32 _message = keccak256(
+      abi.encode(
+        tokenProxy.PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH(),
+        _delegator,
+        keccak256(abi.encodePacked(_payload)),
+        _suppliedNonce,
+        _deadline
+      )
+    );
+
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
+    bytes memory _signature = _sign(_delegatorPrivateKey, _messageHash);
+    vm.prank(_actor);
+    vm.expectRevert(abi.encodeWithSelector(InvalidAccountNonce.selector, _delegator, tokenProxy.nonces(_delegator)));
+    tokenProxy.delegateOnBehalf(_delegator, _delegations, _suppliedNonce, _deadline, _signature);
+  }
+
+  function testFuzz_RevertIf_DelegatesViaERC712SignatureWithExpiredDeadline(
+    address _actor,
+    uint256 _delegatorPrivateKey,
+    uint256 _delegationSeed,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _currentTimeStamp,
+    uint256 _deadline
+  ) public {
+    vm.assume(_actor != address(0));
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _currentTimeStamp = bound(_currentTimeStamp, 1, type(uint256).max);
+    vm.warp(_currentTimeStamp);
+    _deadline = bound(_deadline, 0, _currentTimeStamp - 1);
+
+    _mint(_delegator, _delegatorBalance);
+
+    PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
+
+    bytes32[] memory _payload = new bytes32[](_delegations.length);
+    for (uint256 i; i < _delegations.length; i++) {
+      _payload[i] = _hash(_delegations[i]);
+    }
+
+    bytes32 _message = keccak256(
+      abi.encode(
+        tokenProxy.PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH(),
+        _delegator,
+        keccak256(abi.encodePacked(_payload)),
+        _currentNonce,
+        _deadline
+      )
+    );
+
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
+    bytes memory _signature = _sign(_delegatorPrivateKey, _messageHash);
+    vm.prank(_actor);
+    vm.expectRevert(abi.encodeWithSelector(VotesExpiredSignature.selector, _deadline));
+    tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
+  }
+
+  function testFuzz_RevertIf_DelegatesViaInvalidERC712Signature(
+    address _actor,
+    uint256 _delegatorPrivateKey,
+    uint256 _delegationSeed,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _deadline,
+    uint256 _randomSeed
+  ) public {
+    vm.assume(_actor != address(0));
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, 1, type(uint256).max);
+    vm.warp(_deadline);
+    _deadline = bound(_deadline, 0, block.timestamp - 1);
+
+    _mint(_delegator, _delegatorBalance);
+
+    PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
+
+    bytes32[] memory _payload = new bytes32[](_delegations.length);
+    for (uint256 i; i < _delegations.length; i++) {
+      _payload[i] = _hash(_delegations[i]);
+    }
+
+    bytes32 _message = keccak256(
+      abi.encode(
+        tokenProxy.PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH(),
+        _delegator,
+        keccak256(abi.encodePacked(_payload)),
+        _currentNonce,
+        _deadline
+      )
+    );
+
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
+
+    // Here we use `_randomSeed` as an arbitrary source of randomness to replace a legit parameter
+    // with an attack-like one.
+    if (_randomSeed % 5 == 0) {
+      _delegationSeed = uint256(keccak256(abi.encode(_delegationSeed)));
+    } else if (_randomSeed % 5 == 1) {
+      _delegator = address(uint160(uint256(keccak256(abi.encode(_delegator)))));
+    } else if (_randomSeed % 5 == 2) {
+      _currentNonce = uint256(keccak256(abi.encode(_currentNonce)));
+    } else if (_randomSeed % 5 == 3) {
+      _deadline = uint256(keccak256(abi.encode(_deadline)));
+    }
+
+    bytes memory _signature = _sign(_delegatorPrivateKey, _messageHash);
+    if (_randomSeed % 5 == 4) {
+      _signature = _modifySignature(_signature, _randomSeed);
+    }
+    vm.prank(_actor);
+    vm.expectRevert();
+    tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
+  }
+
+  function testFuzz_RevertIf_TheERC1271SignatureIsNotValid(
+    address _actor,
+    uint256 _delegationSeed,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _deadline,
+    bytes memory _signature
+  ) public {
+    vm.assume(_actor != address(0));
+    MockERC1271Signer _erc1271Signer = new MockERC1271Signer();
+    _erc1271Signer.setResponse__isValidSignature(false);
+    address _delegator = address(_erc1271Signer);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(address(_delegator)).checked_write(
+      _currentNonce
+    );
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
+
+    bytes32[] memory _payload = new bytes32[](_delegations.length);
+    for (uint256 i; i < _delegations.length; i++) {
+      _payload[i] = _hash(_delegations[i]);
+    }
+
+    vm.prank(_actor);
+    vm.expectRevert(InvalidSignature.selector);
+    tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
+  }
+
+  function _modifySignature(bytes memory _signature, uint256 _index) internal pure returns (bytes memory) {
+    _index = bound(_index, 0, _signature.length - 1);
+    // zero out the byte at the given index, or set it to 1 if it's already zero
+    if (_signature[_index] == 0) {
+      _signature[_index] = bytes1(uint8(1));
+    } else {
+      _signature[_index] = bytes1(uint8(0));
+    }
+    return _signature;
   }
 }
 
