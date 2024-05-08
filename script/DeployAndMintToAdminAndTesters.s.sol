@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 
 import {Script, console} from "forge-std/Script.sol";
 import {DeployL2GovToken} from "./DeployL2GovToken.s.sol";
+import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 
 contract DeployAndMintToAdminAndTesters is DeployL2GovToken {
   function setUp() public virtual override {
@@ -16,6 +17,8 @@ contract DeployAndMintToAdminAndTesters is DeployL2GovToken {
     proxy.grantRole(proxy.MINTER_ROLE(), admin);
     // Minting to admin and testing mnemonic accounts
     mintToAdminAndTesters();
+    // Delegating to testing mnemonic accounts
+    delegateToTesters();
     vm.stopBroadcast();
   }
 
@@ -33,5 +36,15 @@ contract DeployAndMintToAdminAndTesters is DeployL2GovToken {
       proxy.mint(testers[i], 100_000 ether);
       console.log("Tester: ", testers[i], "\tToken balance: ", proxy.balanceOf(testers[i]));
     }
+  }
+
+  function delegateToTesters() public {
+    PartialDelegation[] memory delegates = new PartialDelegation[](5);
+    delegates[0] = PartialDelegation(0x3664eBffA59d4e2Bb89489ec8FB60C91607fe50d, 1000);
+    delegates[1] = PartialDelegation(0x4D5124802eE0C8782b3092E8d2D058caD345b290, 3000);
+    delegates[2] = PartialDelegation(0x5b9c45Ef995Fe31E1C6cb58Dbeb7cb874EF6B060, 2000);
+    delegates[3] = PartialDelegation(0x68200BA64c6158e890703aa2DF661a957f8f0aA9, 1500);
+    delegates[4] = PartialDelegation(0xa6B883a217D343585DC8f436d277Eae917B77f95, 2500);
+    proxy.delegate(delegates);
   }
 }

@@ -49,6 +49,7 @@ interface IVotesPartialDelegation {
 
   /**
    * @dev Returns the delegate that `account` has chosen.
+   * Removed: This function is incompatible with partial delegation, which allows for multiple delegates per account.
    */
   //   function delegates(address account) external view returns (address);
 

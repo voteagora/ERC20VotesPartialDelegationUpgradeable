@@ -44,13 +44,18 @@ abstract contract VotesPartialDelegationUpgradeable is
   /// @notice Emitted when an invalid signature is provided.
   error InvalidSignature();
 
+  /// @notice Typehash for legacy delegation.
+  /// @custom:legacy
   bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
+  /// @notice Typehash for partial delegation.
   bytes32 public constant PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH = keccak256(
     "PartialDelegationOnBehalf(address delegator,PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
   );
   bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
     keccak256("PartialDelegation(address delegatee,uint96 numerator)");
+  /// @notice Max # of partial delegations that can be specified in a partial delegation set.
   uint256 public constant MAX_PARTIAL_DELEGATIONS = 100;
+  /// @notice Denominator of a partial delegation fraction.
   uint96 public constant DENOMINATOR = 10_000;
 
   enum Op {
@@ -61,7 +66,6 @@ abstract contract VotesPartialDelegationUpgradeable is
   struct DelegationAdjustment {
     address _delegatee;
     uint208 _amount;
-    Op _op;
   }
 
   /// @custom:storage-location erc7201:storage.VotesPartialDelegation
@@ -269,23 +273,25 @@ abstract contract VotesPartialDelegationUpgradeable is
 
     // Subtract votes from old delegatee set, if it exists.
     PartialDelegation[] memory _oldDelegations = delegates(_delegator);
-    if (_oldDelegations.length > 0) {
-      DelegationAdjustment[] memory _old =
-        _calculateWeightDistribution(_oldDelegations, _getVotingUnits(_delegator), Op.SUBTRACT);
-      _createDelegateCheckpoints(_old);
+    uint256 _oldDelegateLength = _oldDelegations.length;
+    DelegationAdjustment[] memory _old = new DelegationAdjustment[](_oldDelegateLength);
+    uint256 _remainderOld;
+    if (_oldDelegateLength > 0) {
+      (_old, _remainderOld) = _calculateWeightDistribution(_oldDelegations, _getVotingUnits(_delegator));
     }
 
-    // Add votes to new delegatee set.
-    DelegationAdjustment[] memory _new =
-      _calculateWeightDistribution(_newDelegations, _getVotingUnits(_delegator), Op.ADD);
-    _createDelegateCheckpoints(_new);
+    // Calculate adjustments for new delegatee set.
+    (DelegationAdjustment[] memory _new, uint256 _remainderNew) =
+      _calculateWeightDistribution(_newDelegations, _getVotingUnits(_delegator));
 
-    // TODO: (optional) prune and sum _old and _new
+    // Now we want a collated list of all delegatee changes, combining the old subtractions with the new additions.
+    // Ideally we'd like to process this only once.
+    _aggregateDelegationAdjustmentsAndCreateCheckpoints(_old, _new, int256(_remainderOld), int256(_remainderNew));
 
     // The rest of this method body replaces in storage the old delegatees with the new ones.
-    uint256 _oldDelegateLength = _oldDelegations.length;
     // keep track of last delegatee to ensure ordering / uniqueness
     address _lastDelegatee;
+    PartialDelegation[] memory _oldDelegates = $._delegatees[_delegator];
 
     for (uint256 i = 0; i < _newDelegations.length; i++) {
       // check sorting and uniqueness
@@ -304,12 +310,175 @@ abstract contract VotesPartialDelegationUpgradeable is
         $._delegatees[_delegator].push(_newDelegations[i]);
       }
       _lastDelegatee = _newDelegations[i]._delegatee;
-      emit DelegateChanged(_delegator, _newDelegations[i]._delegatee, _newDelegations[i]._numerator);
     }
     // remove any remaining old delegatees
     if (_oldDelegateLength > _newDelegations.length) {
       for (uint256 i = _newDelegations.length; i < _oldDelegateLength; i++) {
         $._delegatees[_delegator].pop();
+      }
+    }
+    // emit events
+    _emitDelegationEvents(_delegator, _oldDelegates, _newDelegations);
+  }
+
+  function _emitDelegationEvents(address _delegator, PartialDelegation[] memory _old, PartialDelegation[] memory _new)
+    internal
+    virtual
+  {
+    uint256 i;
+    uint256 j;
+    while (i < _old.length || j < _new.length) {
+      if (i < _old.length && j < _new.length && _old[i]._delegatee == _new[j]._delegatee) {
+        if (_old[i]._numerator != _new[j]._numerator) {
+          emit DelegateChanged(_delegator, _new[j]._delegatee, _new[j]._numerator);
+        }
+        i++;
+        j++;
+      } else if (j == _new.length || (i != _old.length && _old[i]._delegatee < _new[j]._delegatee)) {
+        emit DelegateChanged(_delegator, _old[i]._delegatee, 0);
+        i++;
+      } else {
+        emit DelegateChanged(_delegator, _new[j]._delegatee, _new[j]._numerator);
+        j++;
+      }
+    }
+  }
+
+  /// @dev Assumes both _old and _new are sorted by DelegationAdjustment._delegatee
+  function _aggregateDelegationAdjustmentsAndCreateCheckpoints(
+    DelegationAdjustment[] memory _old,
+    DelegationAdjustment[] memory _new,
+    int256 _remainderFromVotes,
+    int256 _remainderToVotes
+  ) internal {
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
+    // start with ith member of _old and jth member of _new.
+    // If they are the same delegatee, combine them, check if result is 0, and iterate i and j.
+    // If _old[i] > _new[j], add _new[j] to the final array and iterate j. If _new[j] > _old[i], add _old[i] and iterate
+    // i.
+    uint256 i = 0;
+    uint256 j = 0;
+    bool _handledRemainderFrom;
+    bool _handledRemainderTo;
+    address _remainderFrom = _old.length > 0 ? _old[_old.length - 1]._delegatee : address(0);
+    address _remainderTo = _new.length > 0 ? _new[_new.length - 1]._delegatee : address(0);
+    while (i < _old.length || j < _new.length) {
+      DelegationAdjustment memory _delegationAdjustment;
+      Op _op;
+
+      // same address is present in both arrays
+      if (i < _old.length && j < _new.length && _old[i]._delegatee == _new[j]._delegatee) {
+        // combine, checkpoint, and iterate
+        _delegationAdjustment._delegatee = _old[i]._delegatee;
+        if (_old[i]._amount != _new[j]._amount) {
+          if (_old[i]._amount > _new[j]._amount) {
+            _op = Op.SUBTRACT;
+            _delegationAdjustment._amount = _old[i]._amount - _new[j]._amount;
+          } else {
+            _op = Op.ADD;
+            _delegationAdjustment._amount = _new[j]._amount - _old[i]._amount;
+          }
+        }
+        i++;
+        j++;
+      } else if (
+        j == _new.length // if we've exhausted the new array, we can just checkpoint the old values
+          || (i != _old.length && _old[i]._delegatee < _new[j]._delegatee) // or, if the ith old delegatee is next in line
+      ) {
+        // skip if 0...
+        _delegationAdjustment._delegatee = _old[i]._delegatee;
+        if (_old[i]._amount != 0) {
+          _op = Op.SUBTRACT;
+          _delegationAdjustment._amount = _old[i]._amount;
+        }
+        i++;
+      } else {
+        // skip if 0...
+        _delegationAdjustment._delegatee = _new[j]._delegatee;
+        if (_new[j]._amount != 0) {
+          _op = Op.ADD;
+          _delegationAdjustment._amount = _new[j]._amount;
+        }
+        j++;
+      }
+
+      // But wait -- we need to handle the remainder votes for the remainder delegatee!
+      // remainderFromVotes should be *subtracted* from remainderFrom delegatee votes, unless remainderFromVotes +
+      // _amount is negative!
+      int256 _voteAdj =
+        _op == Op.ADD ? int256(uint256(_delegationAdjustment._amount)) : -int256(uint256(_delegationAdjustment._amount));
+      if (!_handledRemainderFrom && _delegationAdjustment._delegatee == _remainderFrom) {
+        _handledRemainderFrom = true;
+        // take the existing vote adjustment and add (or subtract) the remainderFromVotes
+        _voteAdj -= _remainderFromVotes;
+        if (_remainderFrom == _remainderTo) {
+          _handledRemainderTo = true;
+          _voteAdj += _remainderToVotes;
+        }
+        if (_voteAdj > 0) {
+          _op = Op.ADD;
+          _delegationAdjustment._amount = uint208(uint256(_voteAdj));
+        } else {
+          _op = Op.SUBTRACT;
+          _delegationAdjustment._amount = uint208(uint256(-_voteAdj));
+        }
+      }
+      if (!_handledRemainderTo && _delegationAdjustment._delegatee == _remainderTo) {
+        _handledRemainderTo = true;
+        _voteAdj += _remainderToVotes;
+        if (_voteAdj > 0) {
+          _op = Op.ADD;
+          _delegationAdjustment._amount = uint208(uint256(_voteAdj));
+        } else {
+          _op = Op.SUBTRACT;
+          _delegationAdjustment._amount = uint208(uint256(-_voteAdj));
+        }
+      }
+
+      if (_delegationAdjustment._amount != 0) {
+        (uint256 oldValue, uint256 newValue) = _push(
+          $._delegateCheckpoints[_delegationAdjustment._delegatee],
+          _operation(_op),
+          SafeCast.toUint208(_delegationAdjustment._amount)
+        );
+
+        emit DelegateVotesChanged(_delegationAdjustment._delegatee, oldValue, newValue);
+      }
+    }
+    // final "handle remainderFrom" and "handle remainderTo" logic, if they weren't handled above
+    DelegationAdjustment memory _delegationAdjustment;
+    Op _op;
+    if (!_handledRemainderFrom) {
+      _handledRemainderFrom = true;
+      int256 _voteAdj = -_remainderFromVotes;
+      if (_remainderFrom == _remainderTo) {
+        _handledRemainderTo = true;
+        _voteAdj = _voteAdj + _remainderToVotes;
+      }
+      if (_voteAdj > 0) {
+        _op = Op.ADD;
+        _delegationAdjustment._amount = uint208(uint256(_voteAdj));
+      } else {
+        _op = Op.SUBTRACT;
+        _delegationAdjustment._amount = uint208(uint256(-_voteAdj));
+      }
+      if (_voteAdj != 0) {
+        (uint256 oldValue, uint256 newValue) = _push(
+          $._delegateCheckpoints[_remainderFrom], _operation(_op), SafeCast.toUint208(_delegationAdjustment._amount)
+        );
+        emit DelegateVotesChanged(_remainderFrom, oldValue, newValue);
+      }
+    }
+    if (!_handledRemainderTo) {
+      _handledRemainderTo = true;
+      int256 _voteAdj = _remainderToVotes;
+      _op = Op.ADD;
+      _delegationAdjustment._amount = uint208(uint256(_voteAdj));
+      if (_voteAdj != 0) {
+        (uint256 oldValue, uint256 newValue) = _push(
+          $._delegateCheckpoints[_remainderTo], _operation(_op), SafeCast.toUint208(_delegationAdjustment._amount)
+        );
+        emit DelegateVotesChanged(_remainderTo, oldValue, newValue);
       }
     }
   }
@@ -334,97 +503,61 @@ abstract contract VotesPartialDelegationUpgradeable is
     }
 
     // finally, calculate delegatee vote changes and create checkpoints accordingly
-    DelegationAdjustment[] memory _delegationAdjustments = _calculateDelegateVoteAdjustments(from, to, amount);
-    if (_delegationAdjustments.length > 0) {
-      _createDelegateCheckpoints(_delegationAdjustments);
-    }
+    _calculateDelegateVoteAdjustmentsAndCreateCheckpoints(from, to, amount);
   }
 
-  function _calculateDelegateVoteAdjustments(address from, address to, uint256 amount)
+  function _calculateDelegateVoteAdjustmentsAndCreateCheckpoints(address from, address to, uint256 amount)
     internal
     virtual
-    returns (DelegationAdjustment[] memory)
   {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    DelegationAdjustment[] memory _delegationAdjustments =
-      new DelegationAdjustment[]($._delegatees[from].length + $._delegatees[to].length);
-
+    DelegationAdjustment[] memory _delegationAdjustmentsFrom = new DelegationAdjustment[]($._delegatees[from].length);
+    int256 _remainderFrom;
     // We'll need to adjust the delegatee votes for both "from" and "to" delegatee sets.
     if ($._delegatees[from].length > 0) {
-      // TODO: maybe don't overload the use of DelegationAdjustment -- we don't use the add/subtract flags here
-      DelegationAdjustment[] memory _from =
-        _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from), Op.ADD /* unused */ );
-      DelegationAdjustment[] memory _fromNew =
-        _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from) - amount, Op.ADD /* unused */ );
+      (DelegationAdjustment[] memory _from, uint256 _remainderOld) =
+        _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from));
+      (DelegationAdjustment[] memory _fromNew, uint256 _remainderNew) =
+        _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from) - amount);
+      _remainderFrom = int256(_remainderOld) - int256(_remainderNew);
 
       for (uint256 i = 0; i < _from.length; i++) {
-        if (i != _from.length - 1) {
-          _delegationAdjustments[i] = DelegationAdjustment({
-            _delegatee: $._delegatees[from][i]._delegatee,
-            _amount: _from[i]._amount - _fromNew[i]._amount,
-            _op: Op.SUBTRACT
-          });
-        } else {
-          // special treatment of remainder delegatee
-          Op _op;
-          uint208 _amount;
-          if (_fromNew[i]._amount == _from[i]._amount) {
-            continue;
-          } else if (_fromNew[i]._amount > _from[i]._amount) {
-            _op = Op.ADD;
-            _amount = _fromNew[i]._amount - _from[i]._amount;
-          } else {
-            _op = Op.SUBTRACT;
-            _amount = _from[i]._amount - _fromNew[i]._amount;
-          }
-          _delegationAdjustments[i] =
-            DelegationAdjustment({_delegatee: $._delegatees[from][i]._delegatee, _amount: _amount, _op: _op});
-        }
+        _delegationAdjustmentsFrom[i] = DelegationAdjustment({
+          _delegatee: $._delegatees[from][i]._delegatee,
+          _amount: _from[i]._amount - _fromNew[i]._amount
+        });
       }
     }
+
+    DelegationAdjustment[] memory _delegationAdjustmentsTo = new DelegationAdjustment[]($._delegatees[to].length);
+    int256 _remainderTo;
     if ($._delegatees[to].length > 0) {
-      DelegationAdjustment[] memory _to =
-        _calculateWeightDistribution($._delegatees[to], _getVotingUnits(to), Op.ADD /* unused */ );
-      DelegationAdjustment[] memory _toNew =
-        _calculateWeightDistribution($._delegatees[to], amount + _getVotingUnits(to), Op.ADD /* unused */ );
+      (DelegationAdjustment[] memory _to, uint256 _remainderOld) =
+        _calculateWeightDistribution($._delegatees[to], _getVotingUnits(to));
+      (DelegationAdjustment[] memory _toNew, uint256 _remainderNew) =
+        _calculateWeightDistribution($._delegatees[to], amount + _getVotingUnits(to));
+      _remainderTo = int256(_remainderNew) - int256(_remainderOld);
 
       for (uint256 i = 0; i < _to.length; i++) {
-        if (i < _to.length - 1) {
-          _delegationAdjustments[i + $._delegatees[from].length] = (
-            DelegationAdjustment({
-              _delegatee: $._delegatees[to][i]._delegatee,
-              _amount: _toNew[i]._amount - _to[i]._amount,
-              _op: Op.ADD
-            })
-          );
-        } else {
-          // special treatment of remainder delegatee
-          Op _op;
-          uint208 _amount;
-          if (_toNew[i]._amount == _to[i]._amount) {
-            continue;
-          } else if (_toNew[i]._amount > _to[i]._amount) {
-            _op = Op.ADD;
-            _amount = _toNew[i]._amount - _to[i]._amount;
-          } else {
-            _op = Op.SUBTRACT;
-            _amount = _to[i]._amount - _toNew[i]._amount;
-          }
-          _delegationAdjustments[i + $._delegatees[from].length] =
-            (DelegationAdjustment({_delegatee: $._delegatees[to][i]._delegatee, _amount: _amount, _op: _op}));
-        }
+        _delegationAdjustmentsTo[i] = (
+          DelegationAdjustment({
+            _delegatee: $._delegatees[to][i]._delegatee,
+            _amount: _toNew[i]._amount - _to[i]._amount
+          })
+        );
       }
     }
-    // TODO: prune zero adjustments, sum all adjustments per delegate
-    return _delegationAdjustments;
+    _aggregateDelegationAdjustmentsAndCreateCheckpoints(
+      _delegationAdjustmentsFrom, _delegationAdjustmentsTo, _remainderFrom, _remainderTo
+    );
   }
 
   /// @notice Internal helper to calculate vote weights from a list of delegations.
   /// It verifies that the sum of the numerators is less than or equal to DENOMINATOR.
-  function _calculateWeightDistribution(PartialDelegation[] memory _delegations, uint256 _amount, Op _op)
+  function _calculateWeightDistribution(PartialDelegation[] memory _delegations, uint256 _amount)
     internal
     pure
-    returns (DelegationAdjustment[] memory)
+    returns (DelegationAdjustment[] memory, uint256)
   {
     DelegationAdjustment[] memory _delegationAdjustments = new DelegationAdjustment[](_delegations.length);
 
@@ -438,38 +571,17 @@ abstract contract VotesPartialDelegationUpgradeable is
       if (_delegations[i]._numerator == 0) {
         revert("VotesPartialDelegation: invalid numerator of 0");
       }
-      _delegationAdjustments[i] = DelegationAdjustment(
-        _delegations[i]._delegatee, uint208(_amount * _delegations[i]._numerator / DENOMINATOR), _op
-      );
+      _delegationAdjustments[i] =
+        DelegationAdjustment(_delegations[i]._delegatee, uint208(_amount * _delegations[i]._numerator / DENOMINATOR));
       _totalNumerator += _delegations[i]._numerator;
       _totalVotes += _delegationAdjustments[i]._amount;
     }
     if (_totalNumerator > DENOMINATOR) {
       revert("VotesPartialDelegation: delegation numerators sum to more than DENOMINATOR");
     }
-    // assign remaining weight to last delegatee
-    // TODO: determine correct behavior
-    if (_totalVotes < _amount) {
-      _delegationAdjustments[_delegations.length - 1]._amount += uint208(_amount - _totalVotes);
-    }
 
-    return _delegationAdjustments;
-  }
-
-  /// @notice Internal helper that creates a delegatee checkpoint for each DelegationAdjustment.
-  /// @dev Prefer a _delegationAdjustments array that's already totaled and pruned.
-  /// totaled: all additions and subtractions should be summed per delegate.
-  /// pruned: all zero adjustments should be removed.
-  function _createDelegateCheckpoints(DelegationAdjustment[] memory _delegationAdjustments) internal {
-    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    for (uint256 i = 0; i < _delegationAdjustments.length; i++) {
-      (uint256 oldValue, uint256 newValue) = _push(
-        $._delegateCheckpoints[_delegationAdjustments[i]._delegatee],
-        _operation(_delegationAdjustments[i]._op),
-        SafeCast.toUint208(_delegationAdjustments[i]._amount)
-      );
-      emit DelegateVotesChanged(_delegationAdjustments[i]._delegatee, oldValue, newValue);
-    }
+    uint256 _leftover = _totalVotes < _amount ? _amount - _totalVotes : 0;
+    return (_delegationAdjustments, _leftover);
   }
 
   /**
