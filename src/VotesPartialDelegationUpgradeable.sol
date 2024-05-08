@@ -54,7 +54,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
     keccak256("PartialDelegation(address delegatee,uint96 numerator)");
   /// @notice Max # of partial delegations that can be specified in a partial delegation set.
-  uint256 public constant MAX_PARTIAL_DELEGATIONS = 100;
+  uint256 public constant MAX_PARTIAL_DELEGATIONS = 3;
   /// @notice Denominator of a partial delegation fraction.
   uint96 public constant DENOMINATOR = 10_000;
 
@@ -331,10 +331,10 @@ abstract contract VotesPartialDelegationUpgradeable is
       if (i < _old.length && j < _new.length && _old[i]._delegatee == _new[j]._delegatee) {
         if (_old[i]._numerator != _new[j]._numerator) {
           emit DelegateChanged(_delegator, _new[j]._delegatee, _new[j]._numerator);
-          i++;
-          j++;
         }
-      } else if (j == _new.length || i != _old.length && _old[i]._delegatee < _new[j]._delegatee) {
+        i++;
+        j++;
+      } else if (j == _new.length || (i != _old.length && _old[i]._delegatee < _new[j]._delegatee)) {
         emit DelegateChanged(_delegator, _old[i]._delegatee, 0);
         i++;
       } else {
