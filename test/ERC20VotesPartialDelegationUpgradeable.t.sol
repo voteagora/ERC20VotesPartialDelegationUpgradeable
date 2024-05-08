@@ -370,9 +370,98 @@ contract DelegateBySig is PartialDelegationTest {
     assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
     assertEq(tokenProxy.getVotes(_delegatee), _delegatorBalance);
   }
-  // expired timestamp
-  // wrong nonce
-  // wrong signature
+
+  function testFuzz_RevertIf_DelegatesViaERC712SignatureWithExpiredDeadline(
+    address _actor,
+    uint256 _delegatorPrivateKey,
+    address _delegatee,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _currentTimestamp,
+    uint256 _deadline
+  ) public {
+    vm.assume(_actor != address(0));
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _currentTimestamp = bound(_currentTimestamp, 1, type(uint256).max);
+    vm.warp(_currentTimestamp);
+    _deadline = bound(_deadline, 0, _currentTimestamp - 1);
+    _mint(_delegator, _delegatorBalance);
+
+    bytes32 _message = keccak256(abi.encode(tokenProxy.DELEGATION_TYPEHASH(), _delegatee, _currentNonce, _deadline));
+
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
+    (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_delegatorPrivateKey, _messageHash);
+    vm.prank(_actor);
+    vm.expectRevert(abi.encodeWithSelector(VotesExpiredSignature.selector, _deadline));
+    tokenProxy.delegateBySig(_delegatee, _currentNonce, _deadline, _v, _r, _s);
+  }
+
+  function testFuzz_RevertIf_DelegatesViaERC712SignatureWithWrongNonce(
+    address _actor,
+    uint256 _delegatorPrivateKey,
+    address _delegatee,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _suppliedNonce,
+    uint256 _deadline
+  ) public {
+    vm.assume(_actor != address(0));
+    vm.assume(_suppliedNonce != _currentNonce);
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    bytes32 _message = keccak256(abi.encode(tokenProxy.DELEGATION_TYPEHASH(), _delegatee, _suppliedNonce, _deadline));
+
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
+    (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_delegatorPrivateKey, _messageHash);
+    vm.prank(_actor);
+    vm.expectRevert(abi.encodeWithSelector(InvalidAccountNonce.selector, _delegator, tokenProxy.nonces(_delegator)));
+    tokenProxy.delegateBySig(_delegatee, _suppliedNonce, _deadline, _v, _r, _s);
+  }
+
+  function testFuzz_RevertIf_DelegatesViaInvalidERC712Signature(
+    address _actor,
+    uint256 _delegatorPrivateKey,
+    address _delegatee,
+    uint256 _delegatorBalance,
+    uint256 _currentNonce,
+    uint256 _deadline,
+    uint256 _randomSeed
+  ) public {
+    vm.assume(_actor != address(0));
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    bytes32 _message = keccak256(abi.encode(tokenProxy.DELEGATION_TYPEHASH(), _delegatee, _currentNonce, _deadline));
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
+
+    // Here we use `_randomSeed` as an arbitrary source of randomness to replace a legit parameter
+    // with an attack-like one.
+    if (_randomSeed % 3 == 0) {
+      _delegatee = address(uint160(uint256(keccak256(abi.encode(_delegatee)))));
+    } else if (_randomSeed % 3 == 1) {
+      _currentNonce = uint256(keccak256(abi.encode(_currentNonce)));
+    }
+    (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_delegatorPrivateKey, _messageHash);
+    if (_randomSeed % 3 == 2) {
+      (_v, _r, _s) = vm.sign(uint256(keccak256(abi.encode(_delegatorPrivateKey))), _messageHash);
+    }
+
+    vm.prank(_actor);
+    try tokenProxy.delegateBySig(_delegatee, _currentNonce, _deadline, _v, _r, _s) {} catch {}
+    assertEq(tokenProxy.delegates(_delegator), new PartialDelegation[](0));
+  }
 }
 
 contract DelegateOnBehalf is PartialDelegationTest {
