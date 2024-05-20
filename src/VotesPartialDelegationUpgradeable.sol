@@ -11,8 +11,9 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Time} from "@openzeppelin/contracts/utils/types/Time.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
+import {PartialDelegation, DelegationAdjustment} from "src/IVotesPartialDelegation.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import {console2} from "forge-std/console2.sol";
 
 /**
  * @dev This is a base abstract contract that tracks voting units, which are a measure of voting power that can be
@@ -61,11 +62,6 @@ abstract contract VotesPartialDelegationUpgradeable is
   enum Op {
     ADD,
     SUBTRACT
-  }
-
-  struct DelegationAdjustment {
-    address _delegatee;
-    uint208 _amount;
   }
 
   /// @custom:storage-location erc7201:storage.VotesPartialDelegation
@@ -286,7 +282,9 @@ abstract contract VotesPartialDelegationUpgradeable is
 
     // Now we want a collated list of all delegatee changes, combining the old subtractions with the new additions.
     // Ideally we'd like to process this only once.
-    _aggregateDelegationAdjustmentsAndCreateCheckpoints(_old, _new, int256(_remainderOld), int256(_remainderNew));
+    _aggregateDelegationAdjustmentsAndCreateCheckpoints(
+      _old, _new, int256(_remainderOld), int256(_remainderNew), _delegator, _delegator
+    );
 
     // The rest of this method body replaces in storage the old delegatees with the new ones.
     // keep track of last delegatee to ensure ordering / uniqueness
@@ -349,7 +347,9 @@ abstract contract VotesPartialDelegationUpgradeable is
     DelegationAdjustment[] memory _old,
     DelegationAdjustment[] memory _new,
     int256 _remainderFromVotes,
-    int256 _remainderToVotes
+    int256 _remainderToVotes,
+    address _remainderFrom,
+    address _remainderTo
   ) internal {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     // start with ith member of _old and jth member of _new.
@@ -360,8 +360,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     uint256 j = 0;
     bool _handledRemainderFrom;
     bool _handledRemainderTo;
-    address _remainderFrom = _old.length > 0 ? _old[_old.length - 1]._delegatee : address(0);
-    address _remainderTo = _new.length > 0 ? _new[_new.length - 1]._delegatee : address(0);
     while (i < _old.length || j < _new.length) {
       DelegationAdjustment memory _delegationAdjustment;
       Op _op;
@@ -472,8 +470,13 @@ abstract contract VotesPartialDelegationUpgradeable is
     if (!_handledRemainderTo) {
       _handledRemainderTo = true;
       int256 _voteAdj = _remainderToVotes;
-      _op = Op.ADD;
-      _delegationAdjustment._amount = uint208(uint256(_voteAdj));
+      if (_voteAdj > 0) {
+        _op = Op.ADD;
+        _delegationAdjustment._amount = uint208(uint256(_voteAdj));
+      } else {
+        _op = Op.SUBTRACT;
+        _delegationAdjustment._amount = uint208(uint256(-_voteAdj));
+      }
       if (_voteAdj != 0) {
         (uint256 oldValue, uint256 newValue) = _push(
           $._delegateCheckpoints[_remainderTo], _operation(_op), SafeCast.toUint208(_delegationAdjustment._amount)
@@ -548,7 +551,7 @@ abstract contract VotesPartialDelegationUpgradeable is
       }
     }
     _aggregateDelegationAdjustmentsAndCreateCheckpoints(
-      _delegationAdjustmentsFrom, _delegationAdjustmentsTo, _remainderFrom, _remainderTo
+      _delegationAdjustmentsFrom, _delegationAdjustmentsTo, _remainderFrom, _remainderTo, from, to
     );
   }
 
