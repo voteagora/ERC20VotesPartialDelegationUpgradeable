@@ -35,7 +35,7 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
 
   function invariant_SumOfBalancesEqualsTotalSupply() public {
     uint256 _sumOfBalances = handler.reduceHolders(0, this.accumulateBalances);
-    assertEq(_sumOfBalances, tokenProxy.totalSupply(), "sum of balances does not dequal total supply");
+    assertEq(_sumOfBalances, tokenProxy.totalSupply(), "sum of balances does not equal total supply");
   }
 
   function invariant_SumOfVotesPlusSumOfNonDelegateBalancesEqualsTotalSupply() public {
