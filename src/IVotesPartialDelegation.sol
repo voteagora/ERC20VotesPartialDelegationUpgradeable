@@ -7,6 +7,11 @@ struct PartialDelegation {
   uint96 _numerator;
 }
 
+struct DelegationAdjustment {
+  address _delegatee;
+  uint208 _amount;
+}
+
 /**
  * @dev Common interface for {ERC20VotesPartialDelegation} and other {VotesPartialDelegation}-enabled contracts.
  */

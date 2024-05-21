@@ -113,6 +113,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     tokenProxy.delegate(_delegatee);
     _holders.add(_holder);
     _delegators.add(_holder);
+    _delegatees.add(_holder);
     _delegatees.add(_delegatee);
   }
 
@@ -129,6 +130,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     tokenProxy.delegate(_delegations);
     _holders.add(_holder);
     _delegators.add(_holder);
+    _delegatees.add(_holder);
   }
 
   function handler_redelegate(uint256 _actorSeed, uint256 _delegationSeed) public countCall("handler_redelegate") {
