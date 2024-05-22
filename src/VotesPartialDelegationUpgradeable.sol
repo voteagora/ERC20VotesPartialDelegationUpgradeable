@@ -532,6 +532,12 @@ abstract contract VotesPartialDelegationUpgradeable is
       }
     }
 
+    if ($._delegatees[to].length == 0) {
+      PartialDelegation[] memory selfDelegation = new PartialDelegation[](1);
+      selfDelegation[0] = PartialDelegation(to, DENOMINATOR);
+      $._delegatees[to].push(selfDelegation[0]);
+    }
+
     DelegationAdjustment[] memory _delegationAdjustmentsTo = new DelegationAdjustment[]($._delegatees[to].length);
     int256 _remainderTo;
     if ($._delegatees[to].length > 0) {

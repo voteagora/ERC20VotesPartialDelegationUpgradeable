@@ -707,6 +707,46 @@ contract DelegateOnBehalf is PartialDelegationTest {
 }
 
 contract Transfer is PartialDelegationTest {
+  function testFuzz_MovesVotesFromOneDelegateeSetToAnotherWhoHasNoDelegatee(
+    address _from,
+    address _to,
+    uint256 _amount,
+    uint256 _toExistingBalance
+  ) public {
+    vm.assume(_from != address(0));
+    vm.assume(_to != address(0));
+    vm.assume(_from != _to);
+    _amount = bound(_amount, 0, type(uint208).max);
+    _toExistingBalance = bound(_toExistingBalance, 0, type(uint208).max - _amount);
+    PartialDelegation[] memory _fromDelegations =
+      _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_from))));
+    PartialDelegation[] memory _toDelegations = new PartialDelegation[](0);
+    vm.startPrank(_to);
+    tokenProxy.mint(_toExistingBalance);
+
+    vm.stopPrank();
+    vm.startPrank(_from);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(_fromDelegations);
+    tokenProxy.transfer(_to, _amount);
+    vm.stopPrank();
+
+    // check that voting power has been reduced on `from` side by proper amount
+    uint256 _fromTotal = 0;
+    for (uint256 i = 0; i < _fromDelegations.length; i++) {
+      assertEq(tokenProxy.getVotes(_fromDelegations[i]._delegatee), 0);
+      _fromTotal += tokenProxy.getVotes(_fromDelegations[i]._delegatee);
+    }
+    assertEq(_fromTotal, 0, "`from` address total votes mismatch");
+    // check that voting power has been augmented on `to` side by proper amount
+    assertCorrectVotes(_toDelegations, _toExistingBalance + _amount, _to);
+    assertEq(tokenProxy.getVotes(_to), _toExistingBalance + _amount);
+    // check that the asset balance successfully updated
+    assertEq(tokenProxy.balanceOf(_from), 0, "nonzero `from` balance");
+    assertEq(tokenProxy.balanceOf(_to), _toExistingBalance + _amount, "`to` balance mismatch");
+    assertEq(tokenProxy.totalSupply(), _toExistingBalance + _amount, "total supply mismatch");
+  }
+
   function testFuzz_MovesVotesFromOneDelegateeSetToAnother(
     address _from,
     address _to,
