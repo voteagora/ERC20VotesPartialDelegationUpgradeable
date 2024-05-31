@@ -25,7 +25,7 @@ contract FakeERC20VotesPartialDelegationUpgradeable is UUPSUpgradeable, ERC20Vot
   function exposed_calculateWeightDistribution(PartialDelegation[] memory _partialDelegations, uint256 _amount)
     public
     pure
-    returns (DelegationAdjustment[] memory, uint256)
+    returns (DelegationAdjustment[] memory)
   {
     return _calculateWeightDistribution(_partialDelegations, _amount);
   }
