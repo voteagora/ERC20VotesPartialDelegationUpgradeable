@@ -5,7 +5,7 @@ pragma solidity ^0.8.20;
 
 import {ERC20PermitUpgradeable} from
   "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
-import {VotesPartialDelegationUpgradeable} from "src/VotesPartialDelegationUpgradeable.sol";
+import {VotesPartialDelegationUpgradeable, NoncesUpgradeable} from "src/VotesPartialDelegationUpgradeable.sol";
 import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
@@ -97,12 +97,7 @@ abstract contract ERC20VotesPartialDelegationUpgradeable is
   /**
    * @dev Returns the next unused nonce for an address.
    */
-  function nonces(address owner)
-    public
-    view
-    override(ERC20PermitUpgradeable, VotesPartialDelegationUpgradeable)
-    returns (uint256)
-  {
-    return super.nonces(owner);
+  function nonces(address owner) public view override(ERC20PermitUpgradeable, NoncesUpgradeable) returns (uint256) {
+    return NoncesUpgradeable.nonces(owner);
   }
 }
