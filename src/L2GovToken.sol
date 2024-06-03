@@ -23,7 +23,7 @@ contract L2GovToken is
         __EIP712_init("L2 Governance Token", "1");
         __AccessControl_init();
         if (_admin == address(0)) {
-            revert("Admin cannot be the zero address");
+            revert InvalidAddressZero();
         }
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
     }
