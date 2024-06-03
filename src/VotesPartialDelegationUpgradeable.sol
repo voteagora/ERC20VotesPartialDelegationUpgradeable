@@ -257,6 +257,13 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
+   * @dev Returns the next unused nonce for an address.
+   */
+  function nonces(address owner) public view virtual override returns (uint256) {
+    return super.nonces(owner);
+  }
+
+  /**
    * @dev Delegate all of `_delegator`'s voting units to delegates specified in `_newDelegations`.
    * Emits events {IVotes-DelegateChanged} and {IVotes-DelegateVotesChanged}.
    */

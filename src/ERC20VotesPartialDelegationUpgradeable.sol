@@ -3,7 +3,8 @@
 
 pragma solidity ^0.8.20;
 
-import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import {ERC20PermitUpgradeable} from
+  "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import {VotesPartialDelegationUpgradeable} from "src/VotesPartialDelegationUpgradeable.sol";
 import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -25,7 +26,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
  */
 abstract contract ERC20VotesPartialDelegationUpgradeable is
   Initializable,
-  ERC20Upgradeable,
+  ERC20PermitUpgradeable,
   VotesPartialDelegationUpgradeable
 {
   /**
@@ -91,5 +92,17 @@ abstract contract ERC20VotesPartialDelegationUpgradeable is
    */
   function checkpoints(address account, uint32 pos) public view virtual returns (Checkpoints.Checkpoint208 memory) {
     return _checkpoints(account, pos);
+  }
+
+  /**
+   * @dev Returns the next unused nonce for an address.
+   */
+  function nonces(address owner)
+    public
+    view
+    override(ERC20PermitUpgradeable, VotesPartialDelegationUpgradeable)
+    returns (uint256)
+  {
+    return super.nonces(owner);
   }
 }
