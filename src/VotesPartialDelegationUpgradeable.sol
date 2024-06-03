@@ -45,6 +45,21 @@ abstract contract VotesPartialDelegationUpgradeable is
   /// @notice Emitted when an invalid signature is provided.
   error InvalidSignature();
 
+  /// @notice Emitted when address zero is provided as admin.
+  error InvalidAddressZero();
+
+  /// @notice Emitted when the number of delegatees exceeds the limit.
+  error PartialDelegationLimitExceeded(uint256 length, uint256 max);
+
+  /// @notice Emitted when the provided delegatee list is not sorted or contains duplicates.
+  error DuplicateOrUnsortedDelegatees(address delegatee);
+
+  /// @notice Emitted when the provided numerator is zero.
+  error InvalidNumeratorZero();
+
+  /// @notice Emitted when the sum of the numerators exceeds the denominator.
+  error NumeratorSumExceedsDenominator(uint256 numerator, uint96 denominator);
+
   /// @notice Typehash for legacy delegation.
   /// @custom:legacy
   bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
@@ -262,7 +277,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    */
   function _delegate(address _delegator, PartialDelegation[] memory _newDelegations) internal virtual {
     if (_newDelegations.length > MAX_PARTIAL_DELEGATIONS) {
-      revert("VotesPartialDelegation: too many partial delegations");
+      revert PartialDelegationLimitExceeded(_newDelegations.length, MAX_PARTIAL_DELEGATIONS);
     }
 
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
@@ -296,7 +311,7 @@ abstract contract VotesPartialDelegationUpgradeable is
       if (i == 0 && _newDelegations[i]._delegatee == address(0)) {
         // zero delegation is allowed if in 0th position
       } else if (_newDelegations[i]._delegatee <= _lastDelegatee) {
-        revert("VotesPartialDelegation: delegatees must be sorted with no duplicates");
+        revert DuplicateOrUnsortedDelegatees(_newDelegations[i]._delegatee);
       }
 
       // replace existing delegatees in storage
@@ -572,7 +587,7 @@ abstract contract VotesPartialDelegationUpgradeable is
     // Iterate through partial delegations to calculate vote weight
     for (uint256 i = 0; i < _delegations.length; i++) {
       if (_delegations[i]._numerator == 0) {
-        revert("VotesPartialDelegation: invalid numerator of 0");
+        revert InvalidNumeratorZero();
       }
       _delegationAdjustments[i] =
         DelegationAdjustment(_delegations[i]._delegatee, uint208(_amount * _delegations[i]._numerator / DENOMINATOR));
@@ -580,7 +595,7 @@ abstract contract VotesPartialDelegationUpgradeable is
       _totalVotes += _delegationAdjustments[i]._amount;
     }
     if (_totalNumerator > DENOMINATOR) {
-      revert("VotesPartialDelegation: delegation numerators sum to more than DENOMINATOR");
+      revert NumeratorSumExceedsDenominator(_totalNumerator, DENOMINATOR);
     }
 
     uint256 _leftover = _totalVotes < _amount ? _amount - _totalVotes : 0;

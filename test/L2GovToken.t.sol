@@ -17,6 +17,9 @@ contract L2GovTest is Test {
 }
 
 contract Initialize is L2GovTest {
+  /// @notice Emitted when address zero is provided as admin.
+  error InvalidAddressZero();
+
   function testInitialize(address _admin) public {
     vm.assume(_admin != address(0));
     assertEq(tokenProxy.name(), "");
@@ -31,5 +34,10 @@ contract Initialize is L2GovTest {
     tokenProxy.initialize(_admin);
     vm.expectRevert(Initializable.InvalidInitialization.selector);
     tokenProxy.initialize(_admin);
+  }
+
+  function test_RevertIf_InvalidAddressZero() public {
+    vm.expectRevert(InvalidAddressZero.selector);
+    tokenProxy.initialize(address(0));
   }
 }

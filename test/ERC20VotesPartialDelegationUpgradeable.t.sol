@@ -14,6 +14,14 @@ contract PartialDelegationTest is Test {
   error InvalidAccountNonce(address account, uint256 currentNonce);
   /// @dev The signature used has expired.
   error VotesExpiredSignature(uint256 expiry);
+  /// @notice Emitted when the number of delegatees exceeds the limit.
+  error PartialDelegationLimitExceeded(uint256 length, uint256 max);
+  /// @notice Emitted when the provided delegatee list is not sorted or contains duplicates.
+  error DuplicateOrUnsortedDelegatees(address delegatee);
+  /// @notice Emitted when the provided numerator is zero.
+  error InvalidNumeratorZero();
+  /// @notice Emitted when the sum of the numerators exceeds the denominator.
+  error NumeratorSumExceedsDenominator(uint256 numerator, uint96 denominator);
 
   FakeERC20VotesPartialDelegationUpgradeable public tokenImpl;
   FakeERC20VotesPartialDelegationUpgradeable public tokenProxy;
@@ -314,6 +322,96 @@ contract Delegate is PartialDelegationTest {
     PartialDelegation[] memory delegations = new PartialDelegation[](1);
     delegations[0] = PartialDelegation(_delegatee, _numerator);
     vm.expectRevert();
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_RevertIf_PartialDelegationLimitExceeded(
+    address _actor,
+    uint256 _amount,
+    uint256 _numOfDelegatees,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _numOfDelegatees =
+      bound(_numOfDelegatees, tokenProxy.MAX_PARTIAL_DELEGATIONS() + 1, tokenProxy.MAX_PARTIAL_DELEGATIONS() + 500);
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(_numOfDelegatees, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        PartialDelegationLimitExceeded.selector, _numOfDelegatees, tokenProxy.MAX_PARTIAL_DELEGATIONS()
+      )
+    );
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_RevertIf_DuplicateOrUnsortedDelegatees(
+    address _actor,
+    uint256 _amount,
+    uint256 _numOfDelegatees,
+    address _replacedDelegatee,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _numOfDelegatees = bound(_numOfDelegatees, 2, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(_numOfDelegatees, _seed);
+    address lastDelegatee = delegations[delegations.length - 1]._delegatee;
+    vm.assume(_replacedDelegatee <= lastDelegatee);
+    delegations[delegations.length - 1]._delegatee = _replacedDelegatee;
+
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    vm.expectRevert(abi.encodeWithSelector(DuplicateOrUnsortedDelegatees.selector, _replacedDelegatee));
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_RevertIf_InvalidNumeratorZero(
+    address _actor,
+    uint256 _amount,
+    uint256 _delegationIndex,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(0, _seed);
+    _delegationIndex = bound(_delegationIndex, 0, delegations.length - 1);
+
+    delegations[_delegationIndex]._numerator = 0;
+
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    vm.expectRevert(InvalidNumeratorZero.selector);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_RevertIf_NumeratorSumExceedsDenominator(
+    address _actor,
+    uint256 _amount,
+    uint256 _delegationIndex,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(0, _seed);
+    _delegationIndex = bound(_delegationIndex, 0, delegations.length - 1);
+
+    delegations[_delegationIndex]._numerator = tokenProxy.DENOMINATOR() + 1;
+    uint256 sumOfNumerators;
+    for (uint256 i; i < delegations.length; i++) {
+      sumOfNumerators += delegations[i]._numerator;
+    }
+
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    vm.expectRevert(
+      abi.encodeWithSelector(NumeratorSumExceedsDenominator.selector, sumOfNumerators, tokenProxy.DENOMINATOR())
+    );
     tokenProxy.delegate(delegations);
     vm.stopPrank();
   }
