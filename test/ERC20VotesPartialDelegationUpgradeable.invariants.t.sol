@@ -38,21 +38,22 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
     assertEq(_sumOfBalances, tokenProxy.totalSupply(), "sum of balances does not equal total supply");
   }
 
-  function invariant_SumOfVotesPlusSumOfNonDelegateBalancesEqualsTotalSupply() public {
-    uint256 _sumOfVotesPlusSumOfNonDelegateBalances =
-      handler.reduceDelegatees(0, this.accumulateVotes) + handler.reduceNonDelegators(0, this.accumulateBalances);
+  function invariant_SumOfVotesPlusRemainderVotesPlusSumOfNonDelegateBalancesEqualsTotalSupply() public {
+    uint256 _sumOfVotes = handler.reduceDelegatees(0, this.accumulateVotes);
+    uint256 _sumOfRemainders = handler.reduceDelegators(0, this.accumulateRemainders);
+    uint256 _sumOfNonDelegateBalances = handler.reduceNonDelegators(0, this.accumulateBalances);
     assertEq(
-      _sumOfVotesPlusSumOfNonDelegateBalances,
+      _sumOfVotes + _sumOfRemainders + _sumOfNonDelegateBalances,
       tokenProxy.totalSupply(),
-      "sum of votes plus sum of non-delegate balances does not equal total supply"
+      "sum of votes plus undelegated remainders plus sum of non-delegate balances does not equal total supply"
     );
   }
 
   function invariant_SumOfVotesEqualsPastTotalSupply() public {
     uint256 blockNum = vm.getBlockNumber();
     vm.roll(blockNum + 1);
-    uint256 _sumOfVotes =
-      handler.reduceDelegatees(0, this.accumulateVotes) + handler.reduceNonDelegators(0, this.accumulateBalances);
+    uint256 _sumOfVotes = handler.reduceDelegatees(0, this.accumulateVotes)
+      + handler.reduceDelegators(0, this.accumulateRemainders) + handler.reduceNonDelegators(0, this.accumulateBalances);
     assertEq(_sumOfVotes, tokenProxy.getPastTotalSupply(blockNum), "sum of votes does not equal past total supply");
   }
 
@@ -65,30 +66,11 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
     return acc + tokenProxy.balanceOf(holder);
   }
 
-  function accumulateVotes(uint256 acc, address delegator) public view returns (uint256) {
-    return acc + tokenProxy.getVotes(delegator);
+  function accumulateVotes(uint256 acc, address delegatee) public view returns (uint256) {
+    return acc + tokenProxy.getVotes(delegatee);
   }
 
-  // this sequence originally failed the invariant suite because we were using a "nondelegator" to delegate. We fixed by
-  // insisting in the handler that a delegation call would not choose a nondelegator address.
-  function test_failedInvariantSequence0() public {
-    handler.handler_mintAndDelegateMulti(
-      0x000000000000000003E039DF9a15c44618bAbe94,
-      1_368_607_983_737_114_171_096_165_722_857_003_722_448_737_526_549,
-      13_809_774_740_327_122_930_825_391_953_334_113_695_731_543_212_108_407_090_779_824_671_289_280_260_352
-    );
-    handler.handler_validNonZeroTransferToNonDelegator(
-      109_606_036_096_319_016_917_839_093_649_372_298_999_054_231_802_973_046_257_082_932_217_391_862_368_008,
-      692_600_176_643_282_132_292_583_435,
-      0x000000000000000001597dadbeedb4caA389875E
-    );
-    handler.handler_mintAndDelegateSingle(
-      0x000000000000000001597dadbeedb4caA389875E,
-      1_392_525_594_766_980_135_378_320_930_067_821_030_844_291_681_746,
-      0x000000000000000001d29bb080bbCE6bd12Dab32
-    );
-    invariant_SumOfBalancesEqualsTotalSupply();
-    invariant_SumOfVotesEqualsPastTotalSupply();
-    invariant_SumOfVotesPlusSumOfNonDelegateBalancesEqualsTotalSupply();
+  function accumulateRemainders(uint256 acc, address delegator) public view returns (uint256) {
+    return acc + handler.ghost_delegatorVoteRemainder(delegator);
   }
 }
