@@ -23,6 +23,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
   mapping(bytes32 => uint256) public calls;
 
   // ghost vars
+  mapping(address => uint208) public ghost_delegatorVoteRemainder;
 
   modifier countCall(bytes32 key) {
     calls[key]++;
@@ -98,7 +99,14 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     if (!_delegators.contains(_holder)) {
       // holder is also a nondelegator, because there's no delegation
       _nondelegators.add(_holder);
+    } else {
+      _adjustDelegatorRemainder(_holder, _holder.delegates(), tokenProxy.balanceOf(_holder));
     }
+  }
+
+  function _adjustDelegatorRemainder(address _delegator, PartialDelegation[] memory _delegations, uint208 _balance) {
+    (, uint208 _remainder) = tokenProxy.exposed_calculateWeightDistributionAndRemainder(_delegations, _balance);
+    ghost_delegatorVoteRemainder[_delegator] = _remainder;
   }
 
   function handler_mintAndDelegateSingle(address _holder, uint256 _amount, address _delegatee)
@@ -109,11 +117,11 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     _holder = _chooseAddressNotInSet(_nondelegators, _holder);
     _delegatee = _boundToNonZeroAddress(_delegatee);
     _mintToken(_holder, _amount);
+    // consider: undelegated vote remainder for a few steps here
     vm.prank(_holder);
     tokenProxy.delegate(_delegatee);
     _holders.add(_holder);
     _delegators.add(_holder);
-    _delegatees.add(_holder);
     _delegatees.add(_delegatee);
   }
 
@@ -130,7 +138,6 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     tokenProxy.delegate(_delegations);
     _holders.add(_holder);
     _delegators.add(_holder);
-    _delegatees.add(_holder);
   }
 
   function handler_redelegate(uint256 _actorSeed, uint256 _delegationSeed) public countCall("handler_redelegate") {
