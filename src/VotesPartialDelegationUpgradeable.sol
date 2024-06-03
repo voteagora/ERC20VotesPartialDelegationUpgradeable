@@ -52,7 +52,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   error PartialDelegationLimitExceeded(uint256 length, uint256 max);
 
   /// @notice Emitted when the provided delegatee list is not sorted or contains duplicates.
-  error DuplicateOrUnsortedDelegatees();
+  error DuplicateOrUnsortedDelegatees(address delegatee);
 
   /// @notice Emitted when the provided numerator is zero.
   error InvalidNumeratorZero();
@@ -311,7 +311,7 @@ abstract contract VotesPartialDelegationUpgradeable is
       if (i == 0 && _newDelegations[i]._delegatee == address(0)) {
         // zero delegation is allowed if in 0th position
       } else if (_newDelegations[i]._delegatee <= _lastDelegatee) {
-        revert DuplicateOrUnsortedDelegatees();
+        revert DuplicateOrUnsortedDelegatees(_newDelegations[i]._delegatee);
       }
 
       // replace existing delegatees in storage

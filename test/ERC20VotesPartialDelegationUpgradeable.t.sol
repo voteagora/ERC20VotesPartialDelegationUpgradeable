@@ -17,7 +17,7 @@ contract PartialDelegationTest is Test {
   /// @notice Emitted when the number of delegatees exceeds the limit.
   error PartialDelegationLimitExceeded(uint256 length, uint256 max);
   /// @notice Emitted when the provided delegatee list is not sorted or contains duplicates.
-  error DuplicateOrUnsortedDelegatees();
+  error DuplicateOrUnsortedDelegatees(address delegatee);
   /// @notice Emitted when the provided numerator is zero.
   error InvalidNumeratorZero();
   /// @notice Emitted when the sum of the numerators exceeds the denominator.
@@ -352,7 +352,7 @@ contract Delegate is PartialDelegationTest {
     address _actor,
     uint256 _amount,
     uint256 _numOfDelegatees,
-    address _newDelegatee,
+    address _replacedDelegatee,
     uint256 _seed
   ) public {
     vm.assume(_actor != address(0));
@@ -360,12 +360,12 @@ contract Delegate is PartialDelegationTest {
     _numOfDelegatees = bound(_numOfDelegatees, 2, tokenProxy.MAX_PARTIAL_DELEGATIONS());
     PartialDelegation[] memory delegations = _createValidPartialDelegation(_numOfDelegatees, _seed);
     address lastDelegatee = delegations[delegations.length - 1]._delegatee;
-    vm.assume(_newDelegatee <= lastDelegatee);
-    delegations[delegations.length - 1]._delegatee = _newDelegatee;
+    vm.assume(_replacedDelegatee <= lastDelegatee);
+    delegations[delegations.length - 1]._delegatee = _replacedDelegatee;
 
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
-    vm.expectRevert(DuplicateOrUnsortedDelegatees.selector);
+    vm.expectRevert(abi.encodeWithSelector(DuplicateOrUnsortedDelegatees.selector, _replacedDelegatee));
     tokenProxy.delegate(delegations);
     vm.stopPrank();
   }
@@ -373,15 +373,14 @@ contract Delegate is PartialDelegationTest {
   function testFuzz_RevertIf_InvalidNumeratorZero(
     address _actor,
     uint256 _amount,
-    uint256 _numOfDelegatees,
     uint256 _delegationIndex,
     uint256 _seed
   ) public {
     vm.assume(_actor != address(0));
     _amount = bound(_amount, 0, type(uint208).max);
-    _numOfDelegatees = bound(_numOfDelegatees, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
-    _delegationIndex = bound(_delegationIndex, 0, _numOfDelegatees - 1);
-    PartialDelegation[] memory delegations = _createValidPartialDelegation(_numOfDelegatees, _seed);
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(0, _seed);
+    _delegationIndex = bound(_delegationIndex, 0, delegations.length - 1);
+
     delegations[_delegationIndex]._numerator = 0;
 
     vm.startPrank(_actor);
@@ -394,15 +393,14 @@ contract Delegate is PartialDelegationTest {
   function testFuzz_RevertIf_NumeratorSumExceedsDenominator(
     address _actor,
     uint256 _amount,
-    uint256 _numOfDelegatees,
     uint256 _delegationIndex,
     uint256 _seed
   ) public {
     vm.assume(_actor != address(0));
     _amount = bound(_amount, 0, type(uint208).max);
-    _numOfDelegatees = bound(_numOfDelegatees, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
-    _delegationIndex = bound(_delegationIndex, 0, _numOfDelegatees - 1);
-    PartialDelegation[] memory delegations = _createValidPartialDelegation(_numOfDelegatees, _seed);
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(0, _seed);
+    _delegationIndex = bound(_delegationIndex, 0, delegations.length - 1);
+
     delegations[_delegationIndex]._numerator = tokenProxy.DENOMINATOR() + 1;
     uint256 sumOfNumerators;
     for (uint256 i; i < delegations.length; i++) {
