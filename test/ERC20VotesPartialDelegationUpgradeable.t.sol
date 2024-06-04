@@ -1104,7 +1104,7 @@ contract Transfer is PartialDelegationTest {
     assertEq(tokenProxy.totalSupply(), _toExistingBalance + _amount, "total supply mismatch");
   }
 
-  function testFuzz_EmitDelegateVotesChangedEventWhenVotesMoveFromOneDelegateeSetToAnother(
+  function testFuzz_EmitsDelegateVotesChangedEventWhenVotesMoveFromOneDelegateeSetToAnother(
     address _from,
     address _to,
     uint256 _amount,
