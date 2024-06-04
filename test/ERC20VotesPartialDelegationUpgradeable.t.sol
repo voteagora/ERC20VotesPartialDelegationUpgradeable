@@ -28,6 +28,11 @@ contract PartialDelegationTest is Test {
   // console2.log(uint(_domainSeparatorV4()))
   bytes32 DOMAIN_SEPARATOR;
 
+  /// @dev Emitted when an account changes their delegate.
+  event DelegateChanged(address indexed delegator, address indexed delegatee, uint96 numerator);
+  /// @dev Emitted when a token transfer or delegate change results in changes to a delegate's number of voting units.
+  event DelegateVotesChanged(address indexed delegate, uint256 previousVotes, uint256 newVotes);
+
   function setUp() public virtual {
     tokenImpl = new FakeERC20VotesPartialDelegationUpgradeable();
     tokenProxy = FakeERC20VotesPartialDelegationUpgradeable(address(new ERC1967Proxy(address(tokenImpl), "")));
@@ -102,6 +107,153 @@ contract PartialDelegationTest is Test {
     return delegations;
   }
 
+  function _expectEmitDelegateChangedEvents(
+    address _delegator,
+    PartialDelegation[] memory _oldDelegations,
+    PartialDelegation[] memory _newDelegations
+  ) internal {
+    uint256 i;
+    uint256 j;
+    while (i < _oldDelegations.length || j < _newDelegations.length) {
+      // If both delegations have the same delegatee
+      if (
+        i < _oldDelegations.length && j < _newDelegations.length
+          && _oldDelegations[i]._delegatee == _newDelegations[j]._delegatee
+      ) {
+        // if the numerator is different
+        if (_oldDelegations[i]._numerator != _newDelegations[j]._numerator) {
+          vm.expectEmit();
+          emit DelegateChanged(_delegator, _newDelegations[j]._delegatee, _newDelegations[j]._numerator);
+        }
+        i++;
+        j++;
+        // Old delegatee comes before the new delegatee OR new delegatees have been exhausted
+      } else if (
+        j == _newDelegations.length
+          || (i != _oldDelegations.length && _oldDelegations[i]._delegatee < _newDelegations[j]._delegatee)
+      ) {
+        vm.expectEmit();
+        emit DelegateChanged(_delegator, _oldDelegations[i]._delegatee, 0);
+        i++;
+        // If new delegatee comes before the old delegatee OR old delegatees have been exhausted
+      } else {
+        vm.expectEmit();
+        emit DelegateChanged(_delegator, _newDelegations[j]._delegatee, _newDelegations[j]._numerator);
+        j++;
+      }
+    }
+  }
+
+  function _expectEmitDelegateVotesChangedEvents(
+    uint256 _amount,
+    PartialDelegation[] memory _fromPartialDelegations,
+    PartialDelegation[] memory _toPartialDelegations
+  ) internal {
+    DelegationAdjustment[] memory _initialVotes =
+      tokenProxy.exposed_calculateWeightDistribution(_fromPartialDelegations, _amount);
+    DelegationAdjustment[] memory _votes =
+      tokenProxy.exposed_calculateWeightDistribution(_toPartialDelegations, _amount);
+
+    uint256 i;
+    uint256 j;
+    while (i < _fromPartialDelegations.length || j < _toPartialDelegations.length) {
+      // If both delegations have the same delegatee
+      if (
+        i < _fromPartialDelegations.length && j < _toPartialDelegations.length
+          && _fromPartialDelegations[i]._delegatee == _toPartialDelegations[j]._delegatee
+      ) {
+        // if the numerator is different
+        if (_fromPartialDelegations[i]._numerator != _toPartialDelegations[j]._numerator) {
+          if (_votes[j]._amount != 0 || _initialVotes[j]._amount != 0) {
+            vm.expectEmit();
+            emit DelegateVotesChanged(
+              _fromPartialDelegations[i]._delegatee, _initialVotes[j]._amount, _votes[j]._amount
+            );
+          }
+        }
+        i++;
+        j++;
+        // Old delegatee comes before the new delegatee OR new delegatees have been exhausted
+      } else if (
+        j == _toPartialDelegations.length
+          || (
+            i != _fromPartialDelegations.length
+              && _fromPartialDelegations[i]._delegatee < _toPartialDelegations[j]._delegatee
+          )
+      ) {
+        if (_initialVotes[i]._amount != 0) {
+          vm.expectEmit();
+          emit DelegateVotesChanged(_fromPartialDelegations[i]._delegatee, _initialVotes[i]._amount, 0);
+        }
+        i++;
+        // If new delegatee comes before the old delegatee OR old delegatees have been exhausted
+      } else {
+        if (_votes[j]._amount != 0) {
+          vm.expectEmit();
+          emit DelegateVotesChanged(_toPartialDelegations[j]._delegatee, 0, _votes[j]._amount);
+        }
+        j++;
+      }
+    }
+  }
+
+  function _expectEmitDelegateVotesChangedEvents(
+    uint256 _amount,
+    uint256 _toExistingBalance,
+    PartialDelegation[] memory _fromPartialDelegations,
+    PartialDelegation[] memory _toPartialDelegations
+  ) internal {
+    DelegationAdjustment[] memory _fromVotes =
+      tokenProxy.exposed_calculateWeightDistribution(_fromPartialDelegations, _amount);
+    DelegationAdjustment[] memory _toInitialVotes =
+      tokenProxy.exposed_calculateWeightDistribution(_toPartialDelegations, _toExistingBalance);
+    DelegationAdjustment[] memory _toVotes =
+      tokenProxy.exposed_calculateWeightDistribution(_toPartialDelegations, _amount + _toExistingBalance);
+
+    uint256 i;
+    uint256 j;
+    while (i < _fromPartialDelegations.length || j < _toPartialDelegations.length) {
+      // If both delegations have the same delegatee
+      if (
+        i < _fromPartialDelegations.length && j < _toPartialDelegations.length
+          && _fromPartialDelegations[i]._delegatee == _toPartialDelegations[j]._delegatee
+      ) {
+        // if the numerator is different
+        if (_fromPartialDelegations[i]._numerator != _toPartialDelegations[j]._numerator) {
+          if (_toVotes[j]._amount != 0 || _fromVotes[j]._amount != 0) {
+            vm.expectEmit();
+            emit DelegateVotesChanged(_fromPartialDelegations[i]._delegatee, _fromVotes[j]._amount, _toVotes[j]._amount);
+          }
+        }
+        i++;
+        j++;
+        // Old delegatee comes before the new delegatee OR new delegatees have been exhausted
+      } else if (
+        j == _toPartialDelegations.length
+          || (
+            i != _fromPartialDelegations.length
+              && _fromPartialDelegations[i]._delegatee < _toPartialDelegations[j]._delegatee
+          )
+      ) {
+        if (_fromVotes[i]._amount != 0) {
+          vm.expectEmit();
+          emit DelegateVotesChanged(_fromPartialDelegations[i]._delegatee, _fromVotes[i]._amount, 0);
+        }
+        i++;
+        // If new delegatee comes before the old delegatee OR old delegatees have been exhausted
+      } else {
+        // If the new delegatee vote weight is not the same as its previous vote weight
+        if (_toVotes[j]._amount != 0 && _toVotes[j]._amount != _toInitialVotes[j]._amount) {
+          vm.expectEmit();
+          emit DelegateVotesChanged(
+            _toPartialDelegations[j]._delegatee, _toInitialVotes[j]._amount, _toVotes[j]._amount
+          );
+        }
+        j++;
+      }
+    }
+  }
+
   function _sign(uint256 _privateKey, bytes32 _messageHash) internal pure returns (bytes memory) {
     (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_privateKey, _messageHash);
     return abi.encodePacked(_r, _s, _v);
@@ -169,6 +321,177 @@ contract Delegate is PartialDelegationTest {
     vm.stopPrank();
     assertEq(tokenProxy.delegates(_actor), delegations);
     assertCorrectVotes(delegations, _amount);
+  }
+
+  function testFuzz_EmitsDelegateChangedEvent(address _actor, uint256 _amount, uint256 _n, uint256 _seed) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+
+    for (uint256 i; i < delegations.length; i++) {
+      vm.expectEmit();
+      emit DelegateChanged(_actor, delegations[i]._delegatee, delegations[i]._numerator);
+    }
+
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateVotesChanged(address _actor, uint256 _amount, uint256 _n, uint256 _seed) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+
+    DelegationAdjustment[] memory _votes = tokenProxy.exposed_calculateWeightDistribution(delegations, _amount);
+
+    for (uint256 i; i < delegations.length; i++) {
+      uint256 expectedVoteWeight = _votes[i]._amount;
+      if (expectedVoteWeight != 0) {
+        vm.expectEmit();
+        emit DelegateVotesChanged(delegations[i]._delegatee, 0, expectedVoteWeight);
+      }
+    }
+
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateChangedEventWhenAllNumeratorsForCurrentDelegateesAreChanged(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _newN,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _newN = bound(_newN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+    PartialDelegation[] memory newDelegations = oldDelegations;
+
+    // Arthimatic overflow/underflow error without this bounding.
+    _seed = bound(
+      _seed,
+      1,
+      /* private key can't be bigger than secp256k1 curve order */
+      115_792_089_237_316_195_423_570_985_008_687_907_852_837_564_279_074_904_382_605_163_141_518_161_494_337 - 1
+    );
+    uint96 _totalNumerator;
+    for (uint256 i = 0; i < _oldN; i++) {
+      uint96 _numerator = uint96(
+        bound(
+          uint256(keccak256(abi.encode(_seed + i))) % tokenProxy.DENOMINATOR(), // initial value of the numerator
+          1,
+          tokenProxy.DENOMINATOR() - _totalNumerator - (_oldN - i) // ensure that there is enough numerator left for the
+            // remaining delegations
+        )
+      );
+      newDelegations[i]._numerator = _numerator;
+      _totalNumerator += _numerator;
+    }
+
+    _expectEmitDelegateChangedEvents(_actor, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateChangedEventWhenAllDelegatesAreReplaced(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _newN,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _newN = bound(_newN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+
+    PartialDelegation[] memory newDelegations =
+      _createValidPartialDelegation(_newN, uint256(keccak256(abi.encode(_seed))));
+    _expectEmitDelegateChangedEvents(_actor, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateVotesChangedEventWhenAllNumeratorsForCurrentDelegateesAreChanged(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _newN,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _newN = bound(_newN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+    PartialDelegation[] memory newDelegations = oldDelegations;
+
+    _seed = bound(
+      _seed,
+      1,
+      /* private key can't be bigger than secp256k1 curve order */
+      115_792_089_237_316_195_423_570_985_008_687_907_852_837_564_279_074_904_382_605_163_141_518_161_494_337 - 1
+    );
+    uint96 _totalNumerator;
+    for (uint256 i = 0; i < _oldN; i++) {
+      uint96 _numerator = uint96(
+        bound(
+          uint256(keccak256(abi.encode(_seed + i))) % tokenProxy.DENOMINATOR(), // initial value of the numerator
+          1,
+          tokenProxy.DENOMINATOR() - _totalNumerator - (_oldN - i) // ensure that there is enough numerator left for the
+            // remaining delegations
+        )
+      );
+      newDelegations[i]._numerator = _numerator;
+      _totalNumerator += _numerator;
+    }
+
+    _expectEmitDelegateVotesChangedEvents(_amount, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateVotesChangedEventWhenAllDelegatesAreReplaced(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _newN,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _newN = bound(_newN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+
+    PartialDelegation[] memory newDelegations =
+      _createValidPartialDelegation(_newN, uint256(keccak256(abi.encode(_seed))));
+    _expectEmitDelegateVotesChangedEvents(_amount, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
   }
 
   function testFuzz_DelegatesToNAddressesAndThenDelegatesToOtherAddresses(
@@ -779,6 +1102,33 @@ contract Transfer is PartialDelegationTest {
     assertEq(tokenProxy.balanceOf(_from), 0, "nonzero `from` balance");
     assertEq(tokenProxy.balanceOf(_to), _toExistingBalance + _amount, "`to` balance mismatch");
     assertEq(tokenProxy.totalSupply(), _toExistingBalance + _amount, "total supply mismatch");
+  }
+
+  function testFuzz_EmitDelegateVotesChangedEventWhenVotesMoveFromOneDelegateeSetToAnother(
+    address _from,
+    address _to,
+    uint256 _amount,
+    uint256 _toExistingBalance
+  ) public {
+    vm.assume(_from != address(0));
+    vm.assume(_to != address(0));
+    vm.assume(_from != _to);
+    _amount = bound(_amount, 1, type(uint208).max);
+    _toExistingBalance = bound(_toExistingBalance, 0, type(uint208).max - _amount);
+    PartialDelegation[] memory _fromDelegations =
+      _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_from))));
+    PartialDelegation[] memory _toDelegations = _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_to))));
+    vm.startPrank(_to);
+    tokenProxy.mint(_toExistingBalance);
+    tokenProxy.delegate(_toDelegations);
+    vm.stopPrank();
+    vm.startPrank(_from);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(_fromDelegations);
+
+    _expectEmitDelegateVotesChangedEvents(_amount, _toExistingBalance, _fromDelegations, _toDelegations);
+    tokenProxy.transfer(_to, _amount);
+    vm.stopPrank();
   }
 
   function testFuzz_CreatesVotesWhenSenderHasNotDelegated() public {
