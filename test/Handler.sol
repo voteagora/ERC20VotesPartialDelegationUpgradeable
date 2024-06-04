@@ -23,6 +23,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
   mapping(bytes32 => uint256) public calls;
 
   // ghost vars
+  mapping(address => uint208) public ghost_delegatorVoteRemainder;
 
   modifier countCall(bytes32 key) {
     calls[key]++;
@@ -98,7 +99,16 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     if (!_delegators.contains(_holder)) {
       // holder is also a nondelegator, because there's no delegation
       _nondelegators.add(_holder);
+    } else {
+      _adjustDelegatorRemainder(_holder);
     }
+  }
+
+  function _adjustDelegatorRemainder(address _delegator) public {
+    (, uint208 _remainder) = tokenProxy.exposed_calculateWeightDistributionAndRemainder(
+      tokenProxy.delegates(_delegator), uint208(tokenProxy.balanceOf(_delegator))
+    );
+    ghost_delegatorVoteRemainder[_delegator] = _remainder;
   }
 
   function handler_mintAndDelegateSingle(address _holder, uint256 _amount, address _delegatee)
@@ -109,12 +119,13 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     _holder = _chooseAddressNotInSet(_nondelegators, _holder);
     _delegatee = _boundToNonZeroAddress(_delegatee);
     _mintToken(_holder, _amount);
+    // consider: undelegated vote remainder for a few steps here
     vm.prank(_holder);
     tokenProxy.delegate(_delegatee);
     _holders.add(_holder);
     _delegators.add(_holder);
-    _delegatees.add(_holder);
     _delegatees.add(_delegatee);
+    _adjustDelegatorRemainder(_holder);
   }
 
   function handler_mintAndDelegateMulti(address _holder, uint256 _amount, uint256 _delegationSeed)
@@ -130,24 +141,26 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     tokenProxy.delegate(_delegations);
     _holders.add(_holder);
     _delegators.add(_holder);
-    _delegatees.add(_holder);
+    _adjustDelegatorRemainder(_holder);
   }
 
   function handler_redelegate(uint256 _actorSeed, uint256 _delegationSeed) public countCall("handler_redelegate") {
-    address _currentActor = _useActor(_delegators, _actorSeed);
+    address _delegator = _useActor(_delegators, _actorSeed);
     PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
-    vm.prank(_currentActor);
+    vm.prank(_delegator);
     tokenProxy.delegate(_delegations);
+    _adjustDelegatorRemainder(_delegator);
   }
 
   function handler_undelegate(uint256 _actorSeed) public countCall("handler_undelegate") {
-    address _currentActor = _useActor(_delegators, _actorSeed);
-    vm.prank(_currentActor);
+    address _holder = _useActor(_delegators, _actorSeed);
+    vm.prank(_holder);
     tokenProxy.delegate(address(0));
 
     // technically address(0) is a delegatee now
     _delegatees.add(address(0));
     // _currentActor is also still technically a delegator delegating to address(0), so we won't add to nondelegates set
+    _adjustDelegatorRemainder(_holder);
   }
 
   function handler_validNonZeroTransferToDelegator(uint256 _amount, uint256 _actorSeed, uint256 _delegatorSeed)
@@ -159,6 +172,8 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     address _to = _useActor(_delegators, _delegatorSeed);
     vm.prank(_currentActor);
     tokenProxy.transfer(_to, _amount);
+    _adjustDelegatorRemainder(_currentActor);
+    _adjustDelegatorRemainder(_to);
   }
 
   function handler_validNonZeroTransferToNonDelegator(uint256 _amount, uint256 _actorSeed, address _to)
@@ -176,6 +191,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     _holders.add(_to);
     // we also know they're a nondelegator
     _nondelegators.add(_to);
+    _adjustDelegatorRemainder(_currentActor);
   }
 
   function handler_callSummary() external view {
