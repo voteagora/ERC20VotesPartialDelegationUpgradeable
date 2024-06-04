@@ -487,8 +487,6 @@ abstract contract VotesPartialDelegationUpgradeable is
   {
     DelegationAdjustment[] memory _delegationAdjustments = new DelegationAdjustment[](_delegations.length);
 
-    // Keep track of totalVotes; we'll want to manage any leftover votes at the end
-    uint256 _totalVotes = 0;
     // Keep track of total numerator to ensure it doesn't exceed DENOMINATOR
     uint256 _totalNumerator = 0;
 
@@ -500,7 +498,6 @@ abstract contract VotesPartialDelegationUpgradeable is
       _delegationAdjustments[i] =
         DelegationAdjustment(_delegations[i]._delegatee, uint208(_amount * _delegations[i]._numerator / DENOMINATOR));
       _totalNumerator += _delegations[i]._numerator;
-      _totalVotes += _delegationAdjustments[i]._amount;
     }
     if (_totalNumerator > DENOMINATOR) {
       revert NumeratorSumExceedsDenominator(_totalNumerator, DENOMINATOR);
