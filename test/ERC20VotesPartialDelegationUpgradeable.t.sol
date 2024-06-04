@@ -868,6 +868,148 @@ contract Transfer is PartialDelegationTest {
   }
 }
 
+contract Permit is PartialDelegationTest {
+  error ERC20InsufficientAllowance(address spender, uint256 allowance, uint256 needed);
+  error ERC2612ExpiredSignature(uint256 deadline);
+  error ERC2612InvalidSigner(address signer, address owner);
+
+  function testFuzz_SuccessfullySetsAllowance(
+    uint256 _holderSeed,
+    address _receiver,
+    uint256 _transferAmount,
+    uint256 _existingBalance,
+    uint256 _deadline
+  ) public {
+    _holderSeed = bound(
+      _holderSeed,
+      1,
+      /* private key can't be bigger than secp256k1 curve order */
+      115_792_089_237_316_195_423_570_985_008_687_907_852_837_564_279_074_904_382_605_163_141_518_161_494_337 - 1
+    );
+    address _holder = vm.addr(_holderSeed);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    vm.assume(_holder != address(0));
+    vm.assume(_receiver != address(0) && _receiver != _holder);
+    _transferAmount = bound(_transferAmount, 0, type(uint208).max);
+    _existingBalance = bound(_existingBalance, _transferAmount, type(uint208).max);
+
+    vm.startPrank(_holder);
+    tokenProxy.mint(_existingBalance);
+    bytes32 _message = keccak256(
+      abi.encode(
+        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+        _holder,
+        _receiver,
+        _transferAmount,
+        tokenProxy.nonces(_holder),
+        _deadline
+      )
+    );
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
+    (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_holderSeed, _messageHash);
+
+    tokenProxy.permit(_holder, _receiver, _transferAmount, _deadline, _v, _r, _s);
+    vm.stopPrank();
+
+    assertEq(tokenProxy.allowance(_holder, _receiver), _transferAmount);
+    vm.prank(_receiver);
+    tokenProxy.transferFrom(_holder, _receiver, _transferAmount);
+    assertEq(tokenProxy.balanceOf(_receiver), _transferAmount);
+  }
+
+  function testFuzz_RevertIf_ERC2612ExpiredSignature(
+    uint256 _holderSeed,
+    address _receiver,
+    uint256 _transferAmount,
+    uint256 _existingBalance,
+    uint256 _invalidDeadline
+  ) public {
+    _holderSeed = bound(
+      _holderSeed,
+      1,
+      /* private key can't be bigger than secp256k1 curve order */
+      115_792_089_237_316_195_423_570_985_008_687_907_852_837_564_279_074_904_382_605_163_141_518_161_494_337 - 1
+    );
+    address _holder = vm.addr(_holderSeed);
+    _invalidDeadline = bound(_invalidDeadline, 0, block.timestamp - 1);
+    vm.assume(_holder != address(0));
+    vm.assume(_receiver != address(0) && _receiver != _holder);
+    _transferAmount = bound(_transferAmount, 0, type(uint208).max);
+    _existingBalance = bound(_existingBalance, _transferAmount, type(uint208).max);
+
+    vm.startPrank(_holder);
+    tokenProxy.mint(_existingBalance);
+    bytes32 _message = keccak256(
+      abi.encode(
+        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+        _holder,
+        _receiver,
+        _transferAmount,
+        tokenProxy.nonces(_holder),
+        _invalidDeadline
+      )
+    );
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
+    (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_holderSeed, _messageHash);
+
+    vm.expectRevert(abi.encodeWithSelector(ERC2612ExpiredSignature.selector, _invalidDeadline));
+    tokenProxy.permit(_holder, _receiver, _transferAmount, _invalidDeadline, _v, _r, _s);
+    vm.stopPrank();
+  }
+
+  function testFuzz_RevertIf_ERC2612InvalidSigner(
+    uint256 _holderSeed,
+    address _receiver,
+    uint256 _transferAmount,
+    uint256 _existingBalance,
+    uint256 _deadline,
+    uint256 _randomSeed
+  ) public {
+    _holderSeed = bound(
+      _holderSeed,
+      1,
+      /* private key can't be bigger than secp256k1 curve order */
+      115_792_089_237_316_195_423_570_985_008_687_907_852_837_564_279_074_904_382_605_163_141_518_161_494_337 - 1
+    );
+    address _holder = vm.addr(_holderSeed);
+    _deadline = bound(_deadline, 0, block.timestamp - 1);
+    vm.assume(_holder != address(0));
+    vm.assume(_receiver != address(0) && _receiver != _holder);
+    _transferAmount = bound(_transferAmount, 0, type(uint208).max);
+    _existingBalance = bound(_existingBalance, _transferAmount, type(uint208).max);
+
+    vm.startPrank(_holder);
+    tokenProxy.mint(_existingBalance);
+    bytes32 _message = keccak256(
+      abi.encode(
+        keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+        _holder,
+        _receiver,
+        _transferAmount,
+        tokenProxy.nonces(_holder),
+        _deadline
+      )
+    );
+    bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
+
+    // Here we use `_randomSeed` as an arbitrary source of randomness to replace a legit parameter
+    // with an attack-like one.
+    if (_randomSeed % 3 == 0) {
+      _receiver = address(uint160(uint256(keccak256(abi.encode(_receiver)))));
+    } else if (_randomSeed % 3 == 1) {
+      _transferAmount = uint256(keccak256(abi.encode(_transferAmount)));
+    }
+    (uint8 _v, bytes32 _r, bytes32 _s) = vm.sign(_holderSeed, _messageHash);
+    if (_randomSeed % 3 == 2) {
+      (_v, _r, _s) = vm.sign(uint256(keccak256(abi.encode(_holderSeed))), _messageHash);
+    }
+
+    vm.expectRevert(abi.encodeWithSelector(ERC2612ExpiredSignature.selector, _deadline));
+    tokenProxy.permit(_holder, _receiver, _transferAmount, _deadline, _v, _r, _s);
+    vm.stopPrank();
+  }
+}
+
 contract Integration is PartialDelegationTest {
   function testFuzz_DelegateAndTransferAndDelegate(
     address _actor,
