@@ -10,16 +10,13 @@ import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /**
- * @dev ERC20VotesUpgradeable except with partial delegation via VotesPartialDelegationUpgradeable.
- * From ERC20VotesUpgradeable:
- * Extension of ERC20 to support Compound-like voting and delegation. This version is more generic than Compound's,
- * and supports token supply up to 2^208^ - 1, while COMP is limited to 2^96^ - 1.
- *
- * NOTE: This contract does not provide interface compatibility with Compound's COMP token.
+ * @dev ERC20VotesUpgradeable except supports partial delegation via VotesPartialDelegationUpgradeable.
+ * Supports token supply up to 2^208^ - 1.
  *
  * This extension keeps a history (checkpoints) of each account's vote power. Vote power can be delegated either
- * by calling the {delegate} function directly, or by providing a signature to be used with {delegateBySig}. Voting
- * power can be queried through the public accessors {getVotes} and {getPastVotes}.
+ * by calling the {delegate} function directly, or by providing a signature to be used with {delegateBySig} or
+ * {delegateOnBehalf}.
+ * Voting power can be queried through the public accessors {getVotes} and {getPastVotes}.
  *
  * By default, token balance does not account for voting power. This makes transfers cheaper. The downside is that it
  * requires users to delegate to themselves in order to activate checkpoints and have their voting power tracked.
@@ -55,7 +52,7 @@ abstract contract ERC20VotesPartialDelegationUpgradeable is
   /**
    * @dev Move voting power when tokens are transferred.
    *
-   * Emits a {IVotes-DelegateVotesChanged} event.
+   * Emits one or more {IVotes-DelegateVotesChanged} events.
    */
   function _update(address from, address to, uint256 value) internal virtual override {
     // transfer voting units **before** updating balances
@@ -95,7 +92,7 @@ abstract contract ERC20VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @dev Returns the next unused nonce for an address.
+   * @inheritdoc NoncesUpgradeable
    */
   function nonces(address owner) public view override(ERC20PermitUpgradeable, NoncesUpgradeable) returns (uint256) {
     return NoncesUpgradeable.nonces(owner);
