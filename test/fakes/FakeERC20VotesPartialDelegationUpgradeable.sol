@@ -4,8 +4,9 @@ pragma solidity 0.8.24;
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {ERC20VotesPartialDelegationUpgradeable} from "src/ERC20VotesPartialDelegationUpgradeable.sol";
 import {PartialDelegation, DelegationAdjustment} from "src/IVotesPartialDelegation.sol";
+import {L2GovToken} from "src/L2GovToken.sol";
 
-contract FakeERC20VotesPartialDelegationUpgradeable is UUPSUpgradeable, ERC20VotesPartialDelegationUpgradeable {
+contract FakeERC20VotesPartialDelegationUpgradeable is L2GovToken {
   /// @custom:oz-upgrades-unsafe-allow constructor
   constructor() {
     _disableInitializers();
@@ -15,8 +16,6 @@ contract FakeERC20VotesPartialDelegationUpgradeable is UUPSUpgradeable, ERC20Vot
     __ERC20_init("Fake Token", "FAKE");
     __EIP712_init("Fake Token", "1");
   }
-
-  function _authorizeUpgrade(address) internal override {}
 
   function mint(uint256 _amount) public {
     _mint(msg.sender, _amount);
