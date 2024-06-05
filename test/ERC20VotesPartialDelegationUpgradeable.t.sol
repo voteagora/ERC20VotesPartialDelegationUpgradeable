@@ -323,7 +323,7 @@ contract Delegate is PartialDelegationTest {
     assertCorrectVotes(delegations, _amount);
   }
 
-  function testFuzz_EmitsDelegateChangedEvent(address _actor, uint256 _amount, uint256 _n, uint256 _seed) public {
+  function testFuzz_EmitsDelegateChangedEvents(address _actor, uint256 _amount, uint256 _n, uint256 _seed) public {
     vm.assume(_actor != address(0));
     _amount = bound(_amount, 0, type(uint208).max);
     _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
@@ -331,11 +331,7 @@ contract Delegate is PartialDelegationTest {
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
 
-    for (uint256 i; i < delegations.length; i++) {
-      vm.expectEmit();
-      emit DelegateChanged(_actor, delegations[i]._delegatee, delegations[i]._numerator);
-    }
-
+    _expectEmitDelegateChangedEvents(_actor, new PartialDelegation[](0), delegations);
     tokenProxy.delegate(delegations);
     vm.stopPrank();
   }
@@ -350,14 +346,7 @@ contract Delegate is PartialDelegationTest {
 
     DelegationAdjustment[] memory _votes = tokenProxy.exposed_calculateWeightDistribution(delegations, _amount);
 
-    for (uint256 i; i < delegations.length; i++) {
-      uint256 expectedVoteWeight = _votes[i]._amount;
-      if (expectedVoteWeight != 0) {
-        vm.expectEmit();
-        emit DelegateVotesChanged(delegations[i]._delegatee, 0, expectedVoteWeight);
-      }
-    }
-
+    _expectEmitDelegateVotesChangedEvents(_amount, new PartialDelegation[](0), delegations);
     tokenProxy.delegate(delegations);
     vm.stopPrank();
   }
