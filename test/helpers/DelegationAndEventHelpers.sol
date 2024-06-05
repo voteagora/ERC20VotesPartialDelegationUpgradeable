@@ -64,10 +64,10 @@ contract DelegationAndEventHelpers is Test {
       ) {
         // if the numerator is different
         if (_fromPartialDelegations[i]._numerator != _toPartialDelegations[j]._numerator) {
-          if (_votes[j]._amount != 0 || _initialVotes[j]._amount != 0) {
+          if (_votes[j]._amount != 0 || _initialVotes[i]._amount != 0) {
             vm.expectEmit();
             emit DelegateVotesChanged(
-              _fromPartialDelegations[i]._delegatee, _initialVotes[j]._amount, _votes[j]._amount
+              _fromPartialDelegations[i]._delegatee, _initialVotes[i]._amount, _votes[j]._amount
             );
           }
         }
