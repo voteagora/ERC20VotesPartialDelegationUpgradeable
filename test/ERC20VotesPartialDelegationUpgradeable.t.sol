@@ -269,6 +269,32 @@ contract Delegate is PartialDelegationTest {
     vm.stopPrank();
   }
 
+  function testFuzz_EmitsDelegateChangedEventsWhenDelegateesAreRemoved(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _numOfDelegateesToRemove,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _numOfDelegateesToRemove = bound(_numOfDelegateesToRemove, 0, _oldN - 1);
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+
+    PartialDelegation[] memory newDelegations = new PartialDelegation[](_oldN - _numOfDelegateesToRemove);
+    for (uint256 i; i < newDelegations.length; i++) {
+      newDelegations[i] = oldDelegations[i];
+    }
+
+    _expectEmitDelegateChangedEvents(_actor, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+  }
+
   function testFuzz_EmitsDelegateChangedEventsWhenAllNumeratorsForCurrentDelegateesAreChanged(
     address _actor,
     uint256 _amount,
@@ -370,6 +396,32 @@ contract Delegate is PartialDelegationTest {
       );
       newDelegations[i]._numerator = _numerator;
       _totalNumerator += _numerator;
+    }
+
+    _expectEmitDelegateVotesChangedEvents(_amount, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateVotesChangedEventsWhenDelegateesAreRemoved(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _numOfDelegateesToRemove,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _numOfDelegateesToRemove = bound(_numOfDelegateesToRemove, 0, _oldN - 1);
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+
+    PartialDelegation[] memory newDelegations = new PartialDelegation[](_oldN - _numOfDelegateesToRemove);
+    for (uint256 i; i < newDelegations.length; i++) {
+      newDelegations[i] = oldDelegations[i];
     }
 
     _expectEmitDelegateVotesChangedEvents(_amount, oldDelegations, newDelegations);
