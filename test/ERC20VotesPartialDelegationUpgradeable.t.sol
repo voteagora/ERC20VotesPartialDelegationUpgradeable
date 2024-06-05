@@ -351,7 +351,7 @@ contract Delegate is PartialDelegationTest {
     vm.stopPrank();
   }
 
-  function testFuzz_EmitsDelegateChangedEventWhenAllNumeratorsForCurrentDelegateesAreChanged(
+  function testFuzz_EmitsDelegateChangedEventsWhenAllNumeratorsForCurrentDelegateesAreChanged(
     address _actor,
     uint256 _amount,
     uint256 _oldN,
@@ -394,7 +394,7 @@ contract Delegate is PartialDelegationTest {
     vm.stopPrank();
   }
 
-  function testFuzz_EmitsDelegateChangedEventWhenAllDelegatesAreReplaced(
+  function testFuzz_EmitsDelegateChangedEventsWhenAllDelegatesAreReplaced(
     address _actor,
     uint256 _amount,
     uint256 _oldN,
@@ -417,7 +417,7 @@ contract Delegate is PartialDelegationTest {
     vm.stopPrank();
   }
 
-  function testFuzz_EmitsDelegateVotesChangedEventWhenAllNumeratorsForCurrentDelegateesAreChanged(
+  function testFuzz_EmitsDelegateVotesChangedEventsWhenAllNumeratorsForCurrentDelegateesAreChanged(
     address _actor,
     uint256 _amount,
     uint256 _oldN,
@@ -459,7 +459,7 @@ contract Delegate is PartialDelegationTest {
     vm.stopPrank();
   }
 
-  function testFuzz_EmitsDelegateVotesChangedEventWhenAllDelegatesAreReplaced(
+  function testFuzz_EmitsDelegateVotesChangedEventsWhenAllDelegatesAreReplaced(
     address _actor,
     uint256 _amount,
     uint256 _oldN,
@@ -1093,7 +1093,7 @@ contract Transfer is PartialDelegationTest {
     assertEq(tokenProxy.totalSupply(), _toExistingBalance + _amount, "total supply mismatch");
   }
 
-  function testFuzz_EmitsDelegateVotesChangedEventWhenVotesMoveFromOneDelegateeSetToAnother(
+  function testFuzz_EmitsDelegateVotesChangedEventsWhenVotesMoveFromOneDelegateeSetToAnother(
     address _from,
     address _to,
     uint256 _amount,
