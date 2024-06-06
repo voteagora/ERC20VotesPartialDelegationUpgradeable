@@ -1513,6 +1513,26 @@ contract ExpectEmitDelegateVotesChangedEvents is PartialDelegationTest {
 }
 
 contract ExpectEmitDelegateVotesChangedEventsDuringTransfer is PartialDelegationTest {
+  function test_EmitsWhenTransferringTokensFromAnAddressWithNoDelegationsToAnAddressWithNoDelegations() public {
+    address from = address(0x10);
+    address to = address(0x20);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](0);
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](0);
+
+    vm.prank(from);
+    tokenProxy.mint(100);
+
+    vm.prank(to);
+    tokenProxy.mint(100);
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, 100, _oldDelegations, _newDelegations);
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    assertEq(_logLength, 0);
+  }
+
   function test_EmitsWhenTransferringTokensFromAnAddressWithSingleDelegateeToAnAddressWithNoDelegations() public {
     address from = address(0x10);
     address to = address(0x20);
