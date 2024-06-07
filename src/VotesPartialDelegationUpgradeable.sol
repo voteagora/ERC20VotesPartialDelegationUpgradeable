@@ -67,6 +67,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   bytes32 public constant PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH = keccak256(
     "PartialDelegationOnBehalf(address delegator,PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
   );
+  /// @notice Typehash for partial delegation.
   bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
     keccak256("PartialDelegation(address delegatee,uint96 numerator)");
   /// @notice Max # of partial delegations that can be specified in a partial delegation set.
@@ -109,11 +110,11 @@ abstract contract VotesPartialDelegationUpgradeable is
   function __VotesPartialDelegation_init() internal onlyInitializing {}
 
   function __VotesPartialDelegation_init_unchained() internal onlyInitializing {}
+
   /**
    * @dev Clock used for flagging checkpoints. Can be overridden to implement timestamp based
    * checkpoints (and voting), in which case {CLOCK_MODE} should be overridden as well to match.
    */
-
   function clock() public view virtual returns (uint48) {
     return Time.blockNumber();
   }
@@ -185,7 +186,8 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @dev Returns the delegates that `account` has chosen.
+   * @notice Returns the delegates that `account` has chosen.
+   * @param account The delegator's address.
    */
   function delegates(address account) public view virtual returns (PartialDelegation[] memory) {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
@@ -193,7 +195,8 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @dev Delegates votes from the sender to `delegatee`.
+   * @notice Delegates 100% of sender's votes to `delegatee`.
+   * @param delegatee The address to delegate votes to.
    * @custom:legacy
    */
   function delegate(address delegatee) public virtual {
@@ -204,7 +207,16 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @dev Delegates votes from the sender to each `PartialDelegation._delegatee`.
+   * @notice Delegates votes from the sender to any number of `PartialDelegation._delegatee`s, up to
+   * `MAX_PARTIAL_DELEGATIONS`. A partial delegation consists of a delegatee and a numerator which will act as a
+   * percentage (i.e. with DENOMINATOR set to 10_000, a numerator of 1_000 will be a 10% delegation). When passing the
+   * partial delegation items to this method, it's required to sort them by delegatee, with no duplicates. Otherwise,
+   * the call will revert. Additionally, the sum of the array's numerators must not exceed DENOMINATOR.
+   * @param _partialDelegations The array of partial delegations to delegate to.
+   * @dev Reverts if the number of partial delegations exceeds `MAX_PARTIAL_DELEGATIONS`.
+   * Reverts if the sum of the numerators in `_partialDelegations` exceeds `DENOMINATOR`.
+   * Reverts if the delegations are not sorted or contain duplicates.
+   * Emits {DelegateChanged} and {DelegateVotesChanged} events.
    */
   function delegate(PartialDelegation[] calldata _partialDelegations) public virtual {
     address account = _msgSender();
@@ -212,7 +224,13 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @notice Delegates votes from signer to `delegatee`.
+   * @notice Delegates 100% of votes from signer to `delegatee`.
+   * @param delegatee The address to delegate votes to.
+   * @param nonce The signer's nonce.
+   * @param expiry The timestamp at which the signature expires.
+   * @param v The recovery byte of the signature.
+   * @param r Half of the ECDSA signature pair.
+   * @param s Half of the ECDSA signature pair.
    * @custom:legacy
    */
   function delegateBySig(address delegatee, uint256 nonce, uint256 expiry, uint8 v, bytes32 r, bytes32 s)
@@ -231,7 +249,21 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @dev Delegates votes from signer to `_partialDelegations`.
+   * @notice Delegates votes from signer to any number of `_partialDelegations`, up to `MAX_PARTIAL_DELEGATIONS`. A
+   * partial delegation consists of a delegatee and a numerator which will act as a percentage (i.e. with DENOMINATOR
+   * set to 10_000, a numerator of 1_000 will be a 10% delegation). When passing the partial delegation items to this
+   * method, it's required to sort them by delegatee, with no duplicates. Otherwise, the call will revert. Additionally,
+   * the sum of the array's numerators must not exceed DENOMINATOR.
+   * @param _delegator The signer who is delegating votes.
+   * @param _partialDelegations The array of partial delegations to delegate to.
+   * @param _nonce The signer's nonce.
+   * @param _expiry The timestamp at which the signature expires.
+   * @param _signature The EIP712/ERC1271 signature from the signer.
+   * @dev Reverts if the signature is invalid, expired, or if the number of partial delegations exceeds
+   * `MAX_PARTIAL_DELEGATIONS`.
+   * Reverts if the sum of the numerators in `_partialDelegations` exceeds `DENOMINATOR`.
+   * Reverts if the delegations are not sorted or contain duplicates.
+   * Emits {DelegateChanged} and {DelegateVotesChanged} events.
    */
   function delegateOnBehalf(
     address _delegator,
@@ -330,6 +362,7 @@ abstract contract VotesPartialDelegationUpgradeable is
     _emitDelegationEvents(_delegator, _oldDelegates, _newDelegations);
   }
 
+  /// @dev Emits {DelegateChanged} events for each change in delegation, taking care to avoid duplicates and no-ops.
   function _emitDelegationEvents(address _delegator, PartialDelegation[] memory _old, PartialDelegation[] memory _new)
     internal
     virtual
@@ -353,7 +386,11 @@ abstract contract VotesPartialDelegationUpgradeable is
     }
   }
 
-  /// @dev Assumes both _old and _new are sorted by DelegationAdjustment._delegatee
+  /**
+   * @dev Given an old delegation array and a new delegation array, determine which delegations have changed, create new
+   * voting checkpoints, and emit a {DelegateVotesChanged} event. Takes care to avoid duplicates and no-ops.
+   * Assumes both _old and _new are sorted by `DelegationAdjustment._delegatee`.
+   */
   function _aggregateDelegationAdjustmentsAndCreateCheckpoints(
     DelegationAdjustment[] memory _old,
     DelegationAdjustment[] memory _new
@@ -440,6 +477,9 @@ abstract contract VotesPartialDelegationUpgradeable is
     _calculateDelegateVoteAdjustmentsAndCreateCheckpoints(from, to, amount);
   }
 
+  /**
+   * @dev Calculate the vote weight adjustments for `from` and `to` delegatees and create checkpoints accordingly.
+   */
   function _calculateDelegateVoteAdjustmentsAndCreateCheckpoints(address from, address to, uint256 amount)
     internal
     virtual
@@ -478,8 +518,10 @@ abstract contract VotesPartialDelegationUpgradeable is
     _aggregateDelegationAdjustmentsAndCreateCheckpoints(_delegationAdjustmentsFrom, _delegationAdjustmentsTo);
   }
 
-  /// @notice Internal helper to calculate vote weights from a list of delegations.
-  /// It verifies that the sum of the numerators is less than or equal to DENOMINATOR.
+  /**
+   * @dev Internal helper to calculate vote weights from a list of delegations. It reverts if the sum of the numerators
+   * is greater than DENOMINATOR.
+   */
   function _calculateWeightDistribution(PartialDelegation[] memory _delegations, uint256 _amount)
     internal
     pure
