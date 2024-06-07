@@ -195,7 +195,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @notice Delegates votes from the sender to `delegatee`.
+   * @notice Delegates 100% of sender's votes to `delegatee`.
    * @param delegatee The address to delegate votes to.
    * @custom:legacy
    */
@@ -208,7 +208,10 @@ abstract contract VotesPartialDelegationUpgradeable is
 
   /**
    * @notice Delegates votes from the sender to any number of `PartialDelegation._delegatee`s, up to
-   * `MAX_PARTIAL_DELEGATIONS`.
+   * `MAX_PARTIAL_DELEGATIONS`. A partial delegation consists of a delegatee and a numerator which will act as a
+   * percentage (i.e. with DENOMINATOR set to 10_000, a numerator of 1_000 will be a 10% delegation). When passing the
+   * partial delegation items to this method, it's required to sort them by delegatee, with no duplicates. Otherwise,
+   * the call will revert. Additionally, the sum of the array's numerators must not exceed DENOMINATOR.
    * @param _partialDelegations The array of partial delegations to delegate to.
    * @dev Reverts if the number of partial delegations exceeds `MAX_PARTIAL_DELEGATIONS`.
    * Reverts if the sum of the numerators in `_partialDelegations` exceeds `DENOMINATOR`.
@@ -221,7 +224,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @notice Delegates votes from signer to `delegatee`.
+   * @notice Delegates 100% of votes from signer to `delegatee`.
    * @param delegatee The address to delegate votes to.
    * @param nonce The signer's nonce.
    * @param expiry The timestamp at which the signature expires.
@@ -246,7 +249,11 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @notice Delegates votes from signer to any number of `_partialDelegations`, up to `MAX_PARTIAL_DELEGATIONS`.
+   * @notice Delegates votes from signer to any number of `_partialDelegations`, up to `MAX_PARTIAL_DELEGATIONS`. A
+   * partial delegation consists of a delegatee and a numerator which will act as a percentage (i.e. with DENOMINATOR
+   * set to 10_000, a numerator of 1_000 will be a 10% delegation). When passing the partial delegation items to this
+   * method, it's required to sort them by delegatee, with no duplicates. Otherwise, the call will revert. Additionally,
+   * the sum of the array's numerators must not exceed DENOMINATOR.
    * @param _delegator The signer who is delegating votes.
    * @param _partialDelegations The array of partial delegations to delegate to.
    * @param _nonce The signer's nonce.
