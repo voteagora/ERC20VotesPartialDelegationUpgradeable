@@ -636,7 +636,74 @@ contract Delegate is PartialDelegationTest {
   }
 }
 
-contract DelegateLegacy is PartialDelegationTest {}
+contract DelegateLegacy is PartialDelegationTest {
+  function testFuzz_DelegatesSuccessfully(
+    uint256 _delegatorPrivateKey,
+    address _delegatee,
+    uint256 _delegatorBalance,
+    uint256 _deadline
+  ) public {
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    vm.prank(_delegator);
+    tokenProxy.delegate(_delegatee);
+    assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
+    assertEq(tokenProxy.getVotes(_delegatee), _delegatorBalance);
+  }
+
+  function testFuzz_RedelegatesSuccessfully(
+    uint256 _delegatorPrivateKey,
+    address _delegatee,
+    uint256 _delegatorBalance,
+    uint256 _deadline
+  ) public {
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    vm.prank(_delegator);
+    tokenProxy.delegate(_delegatee);
+    assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
+    assertEq(tokenProxy.getVotes(_delegatee), _delegatorBalance);
+
+    address _newDelegatee = address(uint160(uint256(keccak256(abi.encode(_delegatee)))));
+    vm.prank(_delegator);
+    tokenProxy.delegate(_newDelegatee);
+    assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_newDelegatee));
+    assertEq(tokenProxy.getVotes(_newDelegatee), _delegatorBalance);
+  }
+
+  function testFuzz_RedelegatesToAPartialDelegationSuccessfully(
+    uint256 _delegatorPrivateKey,
+    address _delegatee,
+    uint256 _delegatorBalance,
+    uint256 _deadline,
+    uint256 _seed
+  ) public {
+    _delegatorPrivateKey = bound(_delegatorPrivateKey, 1, 100e18);
+    address _delegator = vm.addr(_delegatorPrivateKey);
+    _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
+    _deadline = bound(_deadline, block.timestamp, type(uint256).max);
+    _mint(_delegator, _delegatorBalance);
+
+    vm.prank(_delegator);
+    tokenProxy.delegate(_delegatee);
+    assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
+    assertEq(tokenProxy.getVotes(_delegatee), _delegatorBalance);
+
+    PartialDelegation[] memory newDelegations = _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_seed))));
+    vm.prank(_delegator);
+    tokenProxy.delegate(newDelegations);
+    assertEq(tokenProxy.delegates(_delegator), newDelegations);
+    assertCorrectVotes(newDelegations, _delegatorBalance);
+  }
+}
 
 contract DelegateBySig is PartialDelegationTest {
   using stdStorage for StdStorage;
