@@ -265,7 +265,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    * Reverts if the delegations are not sorted or contain duplicates.
    * Emits {DelegateChanged} and {DelegateVotesChanged} events.
    */
-  function delegateOnBehalf(
+  function delegatePartiallyOnBehalf(
     address _delegator,
     PartialDelegation[] memory _partialDelegations,
     uint256 _nonce,

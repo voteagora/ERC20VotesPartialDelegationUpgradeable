@@ -827,7 +827,7 @@ contract DelegateBySig is PartialDelegationTest {
   }
 }
 
-contract DelegateOnBehalf is PartialDelegationTest {
+contract DelegatePartiallyOnBehalf is PartialDelegationTest {
   using stdStorage for StdStorage;
 
   function testFuzz_DelegatesSuccessfullyViaERC712Signer(
@@ -866,7 +866,7 @@ contract DelegateOnBehalf is PartialDelegationTest {
     bytes32 _messageHash = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, _message));
     bytes memory _signature = _sign(_delegatorPrivateKey, _messageHash);
     vm.prank(_actor);
-    tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
+    tokenProxy.delegatePartiallyOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
     assertEq(tokenProxy.delegates(_delegator), _delegations);
   }
 
@@ -897,7 +897,7 @@ contract DelegateOnBehalf is PartialDelegationTest {
     }
 
     vm.prank(_actor);
-    tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
+    tokenProxy.delegatePartiallyOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
     assertEq(tokenProxy.delegates(_delegator), _delegations);
   }
 
@@ -940,7 +940,7 @@ contract DelegateOnBehalf is PartialDelegationTest {
     bytes memory _signature = _sign(_delegatorPrivateKey, _messageHash);
     vm.prank(_actor);
     vm.expectRevert(abi.encodeWithSelector(InvalidAccountNonce.selector, _delegator, tokenProxy.nonces(_delegator)));
-    tokenProxy.delegateOnBehalf(_delegator, _delegations, _suppliedNonce, _deadline, _signature);
+    tokenProxy.delegatePartiallyOnBehalf(_delegator, _delegations, _suppliedNonce, _deadline, _signature);
   }
 
   function testFuzz_RevertIf_DelegatesViaERC712SignatureWithExpiredDeadline(
@@ -984,7 +984,7 @@ contract DelegateOnBehalf is PartialDelegationTest {
     bytes memory _signature = _sign(_delegatorPrivateKey, _messageHash);
     vm.prank(_actor);
     vm.expectRevert(abi.encodeWithSelector(VotesExpiredSignature.selector, _deadline));
-    tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
+    tokenProxy.delegatePartiallyOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
   }
 
   function testFuzz_RevertIf_DelegatesViaInvalidERC712Signature(
@@ -1044,7 +1044,7 @@ contract DelegateOnBehalf is PartialDelegationTest {
     }
     vm.prank(_actor);
     vm.expectRevert();
-    tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
+    tokenProxy.delegatePartiallyOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
   }
 
   function testFuzz_RevertIf_TheERC1271SignatureIsNotValid(
@@ -1075,7 +1075,7 @@ contract DelegateOnBehalf is PartialDelegationTest {
 
     vm.prank(_actor);
     vm.expectRevert(InvalidSignature.selector);
-    tokenProxy.delegateOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
+    tokenProxy.delegatePartiallyOnBehalf(_delegator, _delegations, _currentNonce, _deadline, _signature);
   }
 
   function _modifySignature(bytes memory _signature, uint256 _index) internal pure returns (bytes memory) {
