@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity 0.8.24;
 
-import {Test, console, StdStorage, stdStorage} from "forge-std/Test.sol";
+import {console, StdStorage, stdStorage, Vm} from "forge-std/Test.sol";
+import {DelegationAndEventHelpers} from "./helpers/DelegationAndEventHelpers.sol";
 import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
 import {MockERC1271Signer} from "./helpers/MockERC1271Signer.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {PartialDelegation, DelegationAdjustment} from "src/IVotesPartialDelegation.sol";
 
-contract PartialDelegationTest is Test {
+contract PartialDelegationTest is DelegationAndEventHelpers {
   /// @notice Emitted when an invalid signature is provided.
   error InvalidSignature();
   /// @dev The nonce used for an `account` is not the expected current nonce.
@@ -32,6 +33,7 @@ contract PartialDelegationTest is Test {
     tokenImpl = new FakeERC20VotesPartialDelegationUpgradeable();
     tokenProxy = FakeERC20VotesPartialDelegationUpgradeable(address(new ERC1967Proxy(address(tokenImpl), "")));
     tokenProxy.initialize();
+    DelegationAndEventHelpers.initialize(address(tokenProxy));
     // TODO: try to build this with contract state rather than fixed values
     DOMAIN_SEPARATOR = keccak256(
       abi.encode(
@@ -76,30 +78,98 @@ contract PartialDelegationTest is Test {
     return delegations;
   }
 
-  /// @dev
-  function _createValidPartialDelegation(uint256 _n, uint256 _seed) internal view returns (PartialDelegation[] memory) {
-    _seed = bound(
-      _seed,
-      1,
-      /* private key can't be bigger than secp256k1 curve order */
-      115_792_089_237_316_195_423_570_985_008_687_907_852_837_564_279_074_904_382_605_163_141_518_161_494_337 - 1
-    );
-    _n = _n != 0 ? _n : (_seed % tokenProxy.MAX_PARTIAL_DELEGATIONS()) + 1;
-    PartialDelegation[] memory delegations = new PartialDelegation[](_n);
-    uint96 _totalNumerator;
-    for (uint256 i = 0; i < _n; i++) {
-      uint96 _numerator = uint96(
-        bound(
-          uint256(keccak256(abi.encode(_seed + i))) % tokenProxy.DENOMINATOR(), // initial value of the numerator
-          1,
-          tokenProxy.DENOMINATOR() - _totalNumerator - (_n - i) // ensure that there is enough numerator left for the
-            // remaining delegations
-        )
-      );
-      delegations[i] = PartialDelegation(address(uint160(uint160(vm.addr(_seed)) + i)), _numerator);
-      _totalNumerator += _numerator;
+  function _expectEmitDelegateChangedEvents(
+    address _delegator,
+    PartialDelegation[] memory _oldDelegations,
+    PartialDelegation[] memory _newDelegations
+  ) internal {
+    uint256 i;
+    uint256 j;
+    while (i < _oldDelegations.length || j < _newDelegations.length) {
+      // If both delegations have the same delegatee
+      if (
+        i < _oldDelegations.length && j < _newDelegations.length
+          && _oldDelegations[i]._delegatee == _newDelegations[j]._delegatee
+      ) {
+        // if the numerator is different
+        if (_oldDelegations[i]._numerator != _newDelegations[j]._numerator) {
+          vm.expectEmit();
+          emit DelegateChanged(_delegator, _newDelegations[j]._delegatee, _newDelegations[j]._numerator);
+        }
+        i++;
+        j++;
+        // Old delegatee comes before the new delegatee OR new delegatees have been exhausted
+      } else if (
+        j == _newDelegations.length
+          || (i != _oldDelegations.length && _oldDelegations[i]._delegatee < _newDelegations[j]._delegatee)
+      ) {
+        vm.expectEmit();
+        emit DelegateChanged(_delegator, _oldDelegations[i]._delegatee, 0);
+        i++;
+        // If new delegatee comes before the old delegatee OR old delegatees have been exhausted
+      } else {
+        vm.expectEmit();
+        emit DelegateChanged(_delegator, _newDelegations[j]._delegatee, _newDelegations[j]._numerator);
+        j++;
+      }
     }
-    return delegations;
+  }
+
+  function _expectEmitDelegateVotesChangedEvents(
+    uint256 _amount,
+    uint256 _toExistingBalance,
+    PartialDelegation[] memory _fromPartialDelegations,
+    PartialDelegation[] memory _toPartialDelegations
+  ) internal {
+    DelegationAdjustment[] memory _fromVotes =
+      tokenProxy.exposed_calculateWeightDistribution(_fromPartialDelegations, _amount);
+    DelegationAdjustment[] memory _toInitialVotes =
+      tokenProxy.exposed_calculateWeightDistribution(_toPartialDelegations, _toExistingBalance);
+    DelegationAdjustment[] memory _toVotes =
+      tokenProxy.exposed_calculateWeightDistribution(_toPartialDelegations, _amount + _toExistingBalance);
+
+    uint256 i;
+    uint256 j;
+    while (i < _fromPartialDelegations.length || j < _toPartialDelegations.length) {
+      // If both delegations have the same delegatee
+      if (
+        i < _fromPartialDelegations.length && j < _toPartialDelegations.length
+          && _fromPartialDelegations[i]._delegatee == _toPartialDelegations[j]._delegatee
+      ) {
+        // if the numerator is different
+        if (_fromPartialDelegations[i]._numerator != _toPartialDelegations[j]._numerator) {
+          if (_toVotes[j]._amount != 0 || _fromVotes[j]._amount != 0) {
+            vm.expectEmit();
+            emit DelegateVotesChanged(_fromPartialDelegations[i]._delegatee, _fromVotes[j]._amount, _toVotes[j]._amount);
+          }
+        }
+        i++;
+        j++;
+        // Old delegatee comes before the new delegatee OR new delegatees have been exhausted
+      } else if (
+        j == _toPartialDelegations.length
+          || (
+            i != _fromPartialDelegations.length
+              && _fromPartialDelegations[i]._delegatee < _toPartialDelegations[j]._delegatee
+          )
+      ) {
+        if (_fromVotes[i]._amount != 0) {
+          vm.expectEmit();
+          emit DelegateVotesChanged(_fromPartialDelegations[i]._delegatee, _fromVotes[i]._amount, 0);
+        }
+        i++;
+        // If new delegatee comes before the old delegatee OR old delegatees have been exhausted
+      } else {
+        // If the new delegatee vote weight is not the same as its previous vote weight
+        if (_toVotes[j]._amount != 0 && _toVotes[j]._amount != _toInitialVotes[j]._amount) {
+          vm.expectEmit();
+          emit DelegateVotesChanged(
+            _toPartialDelegations[j]._delegatee, _toInitialVotes[j]._amount, _toVotes[j]._amount
+          );
+        }
+        j++;
+      }
+    }
   }
 
   function _sign(uint256 _privateKey, bytes32 _messageHash) internal pure returns (bytes memory) {
@@ -169,6 +239,218 @@ contract Delegate is PartialDelegationTest {
     vm.stopPrank();
     assertEq(tokenProxy.delegates(_actor), delegations);
     assertCorrectVotes(delegations, _amount);
+  }
+
+  function testFuzz_EmitsDelegateChangedEvents(address _actor, uint256 _amount, uint256 _n, uint256 _seed) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+
+    _expectEmitDelegateChangedEvents(_actor, new PartialDelegation[](0), delegations);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateVotesChanged(address _actor, uint256 _amount, uint256 _n, uint256 _seed) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+
+    DelegationAdjustment[] memory _votes = tokenProxy.exposed_calculateWeightDistribution(delegations, _amount);
+
+    _expectEmitDelegateVotesChangedEvents(_amount, new PartialDelegation[](0), delegations);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateChangedEventsWhenDelegateesAreRemoved(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _numOfDelegateesToRemove,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _numOfDelegateesToRemove = bound(_numOfDelegateesToRemove, 0, _oldN - 1);
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+
+    PartialDelegation[] memory newDelegations = new PartialDelegation[](_oldN - _numOfDelegateesToRemove);
+    for (uint256 i; i < newDelegations.length; i++) {
+      newDelegations[i] = oldDelegations[i];
+    }
+
+    _expectEmitDelegateChangedEvents(_actor, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateChangedEventsWhenAllNumeratorsForCurrentDelegateesAreChanged(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _newN,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _newN = bound(_newN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+    PartialDelegation[] memory newDelegations = oldDelegations;
+
+    // Arthimatic overflow/underflow error without this bounding.
+    _seed = bound(
+      _seed,
+      1,
+      /* private key can't be bigger than secp256k1 curve order */
+      115_792_089_237_316_195_423_570_985_008_687_907_852_837_564_279_074_904_382_605_163_141_518_161_494_337 - 1
+    );
+    uint96 _totalNumerator;
+    for (uint256 i = 0; i < _oldN; i++) {
+      uint96 _numerator = uint96(
+        bound(
+          uint256(keccak256(abi.encode(_seed + i))) % tokenProxy.DENOMINATOR(), // initial value of the numerator
+          1,
+          tokenProxy.DENOMINATOR() - _totalNumerator - (_oldN - i) // ensure that there is enough numerator left for the
+            // remaining delegations
+        )
+      );
+      newDelegations[i]._numerator = _numerator;
+      _totalNumerator += _numerator;
+    }
+
+    _expectEmitDelegateChangedEvents(_actor, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateChangedEventsWhenAllDelegatesAreReplaced(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _newN,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _newN = bound(_newN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+
+    PartialDelegation[] memory newDelegations =
+      _createValidPartialDelegation(_newN, uint256(keccak256(abi.encode(_seed))));
+    _expectEmitDelegateChangedEvents(_actor, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateVotesChangedEventsWhenAllNumeratorsForCurrentDelegateesAreChanged(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _newN,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _newN = bound(_newN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+    PartialDelegation[] memory newDelegations = oldDelegations;
+
+    _seed = bound(
+      _seed,
+      1,
+      /* private key can't be bigger than secp256k1 curve order */
+      115_792_089_237_316_195_423_570_985_008_687_907_852_837_564_279_074_904_382_605_163_141_518_161_494_337 - 1
+    );
+    uint96 _totalNumerator;
+    for (uint256 i = 0; i < _oldN; i++) {
+      uint96 _numerator = uint96(
+        bound(
+          uint256(keccak256(abi.encode(_seed + i))) % tokenProxy.DENOMINATOR(), // initial value of the numerator
+          1,
+          tokenProxy.DENOMINATOR() - _totalNumerator - (_oldN - i) // ensure that there is enough numerator left for the
+            // remaining delegations
+        )
+      );
+      newDelegations[i]._numerator = _numerator;
+      _totalNumerator += _numerator;
+    }
+
+    _expectEmitDelegateVotesChangedEvents(_amount, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateVotesChangedEventsWhenDelegateesAreRemoved(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _numOfDelegateesToRemove,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _numOfDelegateesToRemove = bound(_numOfDelegateesToRemove, 0, _oldN - 1);
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+
+    PartialDelegation[] memory newDelegations = new PartialDelegation[](_oldN - _numOfDelegateesToRemove);
+    for (uint256 i; i < newDelegations.length; i++) {
+      newDelegations[i] = oldDelegations[i];
+    }
+
+    _expectEmitDelegateVotesChangedEvents(_amount, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+  }
+
+  function testFuzz_EmitsDelegateVotesChangedEventsWhenAllDelegatesAreReplaced(
+    address _actor,
+    uint256 _amount,
+    uint256 _oldN,
+    uint256 _newN,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _oldN = bound(_oldN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    _newN = bound(_newN, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+
+    PartialDelegation[] memory oldDelegations = _createValidPartialDelegation(_oldN, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(oldDelegations);
+
+    PartialDelegation[] memory newDelegations =
+      _createValidPartialDelegation(_newN, uint256(keccak256(abi.encode(_seed))));
+    _expectEmitDelegateVotesChangedEvents(_amount, oldDelegations, newDelegations);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
   }
 
   function testFuzz_DelegatesToNAddressesAndThenDelegatesToOtherAddresses(
@@ -781,6 +1063,33 @@ contract Transfer is PartialDelegationTest {
     assertEq(tokenProxy.totalSupply(), _toExistingBalance + _amount, "total supply mismatch");
   }
 
+  function testFuzz_EmitsDelegateVotesChangedEventsWhenVotesMoveFromOneDelegateeSetToAnother(
+    address _from,
+    address _to,
+    uint256 _amount,
+    uint256 _toExistingBalance
+  ) public {
+    vm.assume(_from != address(0));
+    vm.assume(_to != address(0));
+    vm.assume(_from != _to);
+    _amount = bound(_amount, 1, type(uint208).max);
+    _toExistingBalance = bound(_toExistingBalance, 0, type(uint208).max - _amount);
+    PartialDelegation[] memory _fromDelegations =
+      _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_from))));
+    PartialDelegation[] memory _toDelegations = _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_to))));
+    vm.startPrank(_to);
+    tokenProxy.mint(_toExistingBalance);
+    tokenProxy.delegate(_toDelegations);
+    vm.stopPrank();
+    vm.startPrank(_from);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(_fromDelegations);
+
+    _expectEmitDelegateVotesChangedEvents(_amount, _toExistingBalance, _fromDelegations, _toDelegations);
+    tokenProxy.transfer(_to, _amount);
+    vm.stopPrank();
+  }
+
   function testFuzz_CreatesVotesWhenSenderHasNotDelegated() public {
     vm.skip(true);
   }
@@ -964,5 +1273,400 @@ contract Integration is PartialDelegationTest {
     uint256 _amount
   ) public {
     vm.skip(true);
+  }
+}
+
+contract ExpectEmitDelegateChangedEvents is PartialDelegationTest {
+  // Source of truth events: The events that are emitted after helpers are the events expect helper should expect, given
+  // the delegation changes.
+
+  function test_EmitsWhenFromNoDelegateeToANewDelegateeIsAdded() public {
+    address _actor = address(this);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](0);
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](1);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
+
+    vm.recordLogs();
+    _expectEmitDelegateChangedEvents(_actor, _oldDelegations, _newDelegations);
+    uint256 _logLength = vm.getRecordedLogs().length;
+
+    emit DelegateChanged(_actor, address(0x1), 5000);
+    assertEq(_logLength, 1);
+  }
+
+  function test_EmitsWhenBothDelegationsHaveTheSameDelegateeButTheNumeratorIsDifferent() public {
+    address _actor = address(this);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](1);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
+
+    vm.recordLogs();
+    _expectEmitDelegateChangedEvents(_actor, _oldDelegations, _newDelegations);
+    uint256 _logLength = vm.getRecordedLogs().length;
+
+    emit DelegateChanged(_actor, address(0x1), 5000);
+    assertEq(_logLength, 1);
+  }
+
+  function test_EmitsWhenOldDelegateeComesBeforeTheNewDelegatee() public {
+    address _actor = address(this);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](2);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
+    _newDelegations[1] = PartialDelegation({_delegatee: address(0x2), _numerator: 5000});
+
+    vm.recordLogs();
+    _expectEmitDelegateChangedEvents(_actor, _oldDelegations, _newDelegations);
+    uint256 _logLength = vm.getRecordedLogs().length;
+
+    emit DelegateChanged(_actor, address(0x1), 5000);
+    emit DelegateChanged(_actor, address(0x2), 5000);
+    assertEq(_logLength, 2);
+  }
+
+  function test_EmitsWhenNewDelegateeComesBeforeTheOldDelegatee() public {
+    address _actor = address(this);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x2), _numerator: 10_000});
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](2);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
+    _newDelegations[1] = PartialDelegation({_delegatee: address(0x2), _numerator: 5000});
+
+    vm.recordLogs();
+    _expectEmitDelegateChangedEvents(_actor, _oldDelegations, _newDelegations);
+    uint256 _logLength = vm.getRecordedLogs().length;
+
+    emit DelegateChanged(_actor, address(0x1), 5000);
+    emit DelegateChanged(_actor, address(0x2), 5000);
+    assertEq(_logLength, 2);
+  }
+
+  function test_CrazyCase1() public {
+    address _actor = address(this);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](8);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5});
+    _oldDelegations[1] = PartialDelegation({_delegatee: address(0x2), _numerator: 7});
+    _oldDelegations[2] = PartialDelegation({_delegatee: address(0x3), _numerator: 9});
+    _oldDelegations[3] = PartialDelegation({_delegatee: address(0x4), _numerator: 11});
+    _oldDelegations[4] = PartialDelegation({_delegatee: address(0xA), _numerator: 13});
+    _oldDelegations[5] = PartialDelegation({_delegatee: address(0xB), _numerator: 15});
+    _oldDelegations[6] = PartialDelegation({_delegatee: address(0xC), _numerator: 17});
+    _oldDelegations[7] = PartialDelegation({_delegatee: address(0xD), _numerator: 19});
+
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](7);
+    // prepend
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x0), _numerator: 5});
+    // leave 0x1 the same
+    _newDelegations[1] = PartialDelegation({_delegatee: address(0x1), _numerator: 5});
+    // change numerator for 0x2
+    _newDelegations[2] = PartialDelegation({_delegatee: address(0x2), _numerator: 19});
+    // remove 0x3
+    // remove 0x4, add 0x9
+    _newDelegations[3] = PartialDelegation({_delegatee: address(0x9), _numerator: 1150});
+    // keep 0xA the same
+    _newDelegations[4] = PartialDelegation({_delegatee: address(0xA), _numerator: 13});
+    // remove 0xB
+    // keep 0xC the same
+    // change 0xD numerator
+    _newDelegations[5] = PartialDelegation({_delegatee: address(0xD), _numerator: 170});
+    // add 0xE
+    _newDelegations[6] = PartialDelegation({_delegatee: address(0xE), _numerator: 190});
+
+    vm.recordLogs();
+    _expectEmitDelegateChangedEvents(_actor, _oldDelegations, _newDelegations);
+    uint256 _logLength = vm.getRecordedLogs().length;
+
+    // Source of truth events: The events that we want the expect helper to expect, given the delegation changes.
+    // 0x0 emitted because new delegate
+    emit DelegateChanged(_actor, address(0x0), 5);
+    // skip 0x1 as no change
+    // 0x2 emitted because numerator change
+    emit DelegateChanged(_actor, address(0x2), 19);
+    // 0x3 emitted because removed
+    emit DelegateChanged(_actor, address(0x3), 0);
+    // 0x4 emitted because removed
+    emit DelegateChanged(_actor, address(0x4), 0);
+    // 0x9 emitted because added
+    emit DelegateChanged(_actor, address(0x9), 1150);
+    // 0xA skipped, no change
+    // 0xB emitted because removed
+    emit DelegateChanged(_actor, address(0xB), 0);
+    // 0xC emitted because removed
+    emit DelegateChanged(_actor, address(0xC), 0);
+    // 0xD emitted because numerator change
+    emit DelegateChanged(_actor, address(0xD), 170);
+    // 0xE emitted because added
+    emit DelegateChanged(_actor, address(0xE), 190);
+    uint256 _expectedLength = vm.getRecordedLogs().length;
+    assertEq(_logLength, _expectedLength);
+  }
+}
+
+contract ExpectEmitDelegateVotesChangedEvents is PartialDelegationTest {
+  /// An Ethereum log. Returned by `getRecordedLogs`.
+
+  function test_EmitsWhenFromNoDelegateeToANewDelegateeIsAdded() public {
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](0);
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](1);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, _oldDelegations, _newDelegations);
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    // Initialized(18_446_744_073_709_551_615) from FakeERC20VotesPartialDelegationUpgradeable utils = new
+    // FakeERC20VotesPartialDelegationUpgradeable();
+    assertEq(entries[0].topics[0], keccak256("Initialized(uint64)"));
+    emit DelegateVotesChanged(address(0x1), 0, 100);
+    assertEq(_logLength, 2);
+  }
+
+  function test_EmitsWhenBothDelegationsHaveTheSameDelegatee() public {
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](1);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, _oldDelegations, _newDelegations);
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    assertEq(entries[0].topics[0], keccak256("Initialized(uint64)"));
+    assertEq(_logLength, 1);
+  }
+
+  function test_EmitsWhenBothDelegationsHaveTheSameDelegateeButDifferentNumerators() public {
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](1);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, _oldDelegations, _newDelegations);
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    assertEq(entries[0].topics[0], keccak256("Initialized(uint64)"));
+    emit DelegateVotesChanged(address(0x1), 100, 50);
+    assertEq(_logLength, 2);
+  }
+
+  function test_EmitsWhenOldDelegateeComesBeforeTheNewDelegatee() public {
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](2);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
+    _newDelegations[1] = PartialDelegation({_delegatee: address(0x2), _numerator: 5000});
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, _oldDelegations, _newDelegations);
+
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    assertEq(entries[0].topics[0], keccak256("Initialized(uint64)"));
+    emit DelegateVotesChanged(address(0x1), 100, 50);
+    emit DelegateVotesChanged(address(0x2), 0, 50);
+    assertEq(_logLength, 3);
+  }
+
+  function test_EmitsWhenNewDelegateeComesBeforeTheOldDelegateeReplacingTheOldDelegatee() public {
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x2), _numerator: 10_000});
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](1);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, _oldDelegations, _newDelegations);
+
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    assertEq(entries[0].topics[0], keccak256("Initialized(uint64)"));
+    emit DelegateVotesChanged(address(0x1), 0, 100);
+    emit DelegateVotesChanged(address(0x2), 100, 0);
+    assertEq(_logLength, 3);
+  }
+
+  function test_EmitsWhenNewDelegateeComesBeforeTheOldDelegateeIncludingThePreviousDelegatee() public {
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x2), _numerator: 10_000});
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](2);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
+    _newDelegations[1] = PartialDelegation({_delegatee: address(0x2), _numerator: 5000});
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, _oldDelegations, _newDelegations);
+
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    assertEq(entries[0].topics[0], keccak256("Initialized(uint64)"));
+    emit DelegateVotesChanged(address(0x1), 0, 50);
+    emit DelegateVotesChanged(address(0x2), 100, 50);
+    assertEq(_logLength, 3);
+  }
+}
+
+contract ExpectEmitDelegateVotesChangedEventsDuringTransfer is PartialDelegationTest {
+  function test_EmitsWhenTransferringTokensFromAnAddressWithNoDelegationsToAnAddressWithNoDelegations() public {
+    address from = address(0x10);
+    address to = address(0x20);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](0);
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](0);
+
+    vm.prank(from);
+    tokenProxy.mint(100);
+
+    vm.prank(to);
+    tokenProxy.mint(100);
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, 100, _oldDelegations, _newDelegations);
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    assertEq(_logLength, 0);
+  }
+
+  function test_EmitsWhenTransferringTokensFromAnAddressWithSingleDelegateeToAnAddressWithNoDelegations() public {
+    address from = address(0x10);
+    address to = address(0x20);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](0);
+
+    vm.startPrank(from);
+    tokenProxy.mint(100);
+    tokenProxy.delegate(_oldDelegations);
+    vm.stopPrank();
+
+    vm.prank(to);
+    tokenProxy.mint(100);
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, 100, _oldDelegations, _newDelegations);
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    emit DelegateVotesChanged(address(0x1), 100, 0);
+    assertEq(_logLength, 1);
+  }
+
+  function test_EmitsWhenTransferringTokensFromAnAddressWithSingleDelegateeToAnAddressWithASingleDelegatee() public {
+    address from = address(0x10);
+    address to = address(0x20);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](1);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x2), _numerator: 10_000});
+
+    vm.startPrank(from);
+    tokenProxy.mint(100);
+    tokenProxy.delegate(_oldDelegations);
+    vm.stopPrank();
+
+    vm.startPrank(to);
+    tokenProxy.mint(100);
+    tokenProxy.delegate(_newDelegations);
+    vm.stopPrank();
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, 100, _oldDelegations, _newDelegations);
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    emit DelegateVotesChanged(address(0x1), 100, 0);
+    emit DelegateVotesChanged(address(0x2), 100, 200);
+    assertEq(_logLength, 2);
+  }
+
+  function test_EmitsWhenTransferringTokensFromAnAddressWithNoDelegationsToAnAddressWithASingleDelegatee() public {
+    address from = address(0x10);
+    address to = address(0x20);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](0);
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](1);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x2), _numerator: 10_000});
+
+    vm.prank(from);
+    tokenProxy.mint(100);
+
+    vm.startPrank(to);
+    tokenProxy.mint(100);
+    tokenProxy.delegate(_newDelegations);
+    vm.stopPrank();
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, 100, _oldDelegations, _newDelegations);
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    emit DelegateVotesChanged(address(0x2), 100, 200);
+    assertEq(_logLength, 1);
+  }
+
+  function test_EmitsWhenTransferringTokensFromAnAddressWithNoDelegationsToAnAddressWithMultipleDelegatees() public {
+    address from = address(0x10);
+    address to = address(0x20);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](0);
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](2);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x2), _numerator: 5000});
+    _newDelegations[1] = PartialDelegation({_delegatee: address(0x3), _numerator: 5000});
+
+    vm.prank(from);
+    tokenProxy.mint(100);
+
+    vm.startPrank(to);
+    tokenProxy.mint(100);
+    tokenProxy.delegate(_newDelegations);
+    vm.stopPrank();
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, 100, _oldDelegations, _newDelegations);
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    emit DelegateVotesChanged(address(0x2), 50, 100);
+    emit DelegateVotesChanged(address(0x3), 50, 100);
+    assertEq(_logLength, 2);
+  }
+
+  function test_EmitsWhenTransferringTokensFromAnAddressWithMultipleDelegateesToAnAddressWithMultipleDelegatees()
+    public
+  {
+    address from = address(0x10);
+    address to = address(0x20);
+    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](2);
+    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
+    _oldDelegations[1] = PartialDelegation({_delegatee: address(0x2), _numerator: 5000});
+
+    PartialDelegation[] memory _newDelegations = new PartialDelegation[](2);
+    _newDelegations[0] = PartialDelegation({_delegatee: address(0x3), _numerator: 5000});
+    _newDelegations[1] = PartialDelegation({_delegatee: address(0x4), _numerator: 5000});
+
+    vm.startPrank(from);
+    tokenProxy.mint(100);
+    tokenProxy.delegate(_oldDelegations);
+    vm.stopPrank();
+
+    vm.startPrank(to);
+    tokenProxy.mint(100);
+    tokenProxy.delegate(_newDelegations);
+    vm.stopPrank();
+
+    vm.recordLogs();
+    _expectEmitDelegateVotesChangedEvents(100, 100, _oldDelegations, _newDelegations);
+    Vm.Log[] memory entries = vm.getRecordedLogs();
+    uint256 _logLength = entries.length;
+
+    emit DelegateVotesChanged(address(0x1), 50, 0);
+    emit DelegateVotesChanged(address(0x2), 50, 0);
+    emit DelegateVotesChanged(address(0x3), 50, 100);
+    emit DelegateVotesChanged(address(0x4), 50, 100);
+    assertEq(_logLength, 4);
   }
 }
