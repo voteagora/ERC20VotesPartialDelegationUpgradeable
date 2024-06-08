@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.24;
+pragma solidity ^0.8.20;
 
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {ERC20VotesPartialDelegationUpgradeable} from "src/ERC20VotesPartialDelegationUpgradeable.sol";
@@ -28,17 +28,5 @@ contract FakeERC20VotesPartialDelegationUpgradeable is UUPSUpgradeable, ERC20Vot
     returns (DelegationAdjustment[] memory)
   {
     return _calculateWeightDistribution(_partialDelegations, _amount);
-  }
-
-  function exposed_calculateWeightDistributionAndRemainder(
-    PartialDelegation[] memory _partialDelegations,
-    uint208 _amount
-  ) public pure returns (DelegationAdjustment[] memory, uint208) {
-    DelegationAdjustment[] memory _adjustments = _calculateWeightDistribution(_partialDelegations, _amount);
-    uint208 _remainder = _amount;
-    for (uint256 i = 0; i < _adjustments.length; i++) {
-      _remainder -= _adjustments[i]._amount;
-    }
-    return (_adjustments, _remainder);
   }
 }

@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: AGPL-3.0-or-later
-pragma solidity ^0.8.24;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
 // AddressSet.sol comes from
 // https://github.com/horsefacts/weth-invariant-testing/blob/973156bc9b6684f0cf62de19e9bb4c5c27a41bb2/test/helpers/AddressSet.sol

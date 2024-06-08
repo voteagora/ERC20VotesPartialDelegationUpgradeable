@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.24;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";

@@ -1,12 +1,12 @@
-// SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.24;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
 import {CommonBase} from "forge-std/Base.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {StdUtils} from "forge-std/StdUtils.sol";
 import {console} from "forge-std/console.sol";
 import {AddressSet, LibAddressSet} from "./helpers/AddressSet.sol";
-import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
+import {PartialDelegation, DelegationAdjustment} from "src/IVotesPartialDelegation.sol";
 import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
 
 contract Handler is CommonBase, StdCheats, StdUtils {
@@ -91,6 +91,20 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     return delegations;
   }
 
+  function _calculateWeightDistributionAndRemainder(PartialDelegation[] memory _partialDelegations, uint208 _amount)
+    public
+    view
+    returns (DelegationAdjustment[] memory, uint208)
+  {
+    DelegationAdjustment[] memory _adjustments =
+      tokenProxy.exposed_calculateWeightDistribution(_partialDelegations, _amount);
+    uint208 _remainder = _amount;
+    for (uint256 i = 0; i < _adjustments.length; i++) {
+      _remainder -= _adjustments[i]._amount;
+    }
+    return (_adjustments, _remainder);
+  }
+
   function handler_mint(address _holder, uint256 _amount) public countCall("handler_mint") {
     _amount = bound(_amount, 1, 100_000_000e18);
     _holder = _boundToNonZeroAddress(_holder);
@@ -105,7 +119,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
   }
 
   function _adjustDelegatorRemainder(address _delegator) public {
-    (, uint208 _remainder) = tokenProxy.exposed_calculateWeightDistributionAndRemainder(
+    (, uint208 _remainder) = _calculateWeightDistributionAndRemainder(
       tokenProxy.delegates(_delegator), uint208(tokenProxy.balanceOf(_delegator))
     );
     ghost_delegatorVoteRemainder[_delegator] = _remainder;

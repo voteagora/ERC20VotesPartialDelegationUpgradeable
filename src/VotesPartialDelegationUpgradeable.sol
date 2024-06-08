@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.0.0) (governance/utils/Votes.sol)
 pragma solidity ^0.8.20;
 
 import {IERC5805Modified} from "src/IERC5805Modified.sol";
@@ -13,7 +12,6 @@ import {Time} from "@openzeppelin/contracts/utils/types/Time.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {PartialDelegation, DelegationAdjustment} from "src/IVotesPartialDelegation.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
-import {console2} from "forge-std/console2.sol";
 
 /**
  * @dev This is a base abstract contract that tracks voting units, which are a measure of voting power that can be
@@ -23,7 +21,7 @@ import {console2} from "forge-std/console2.sol";
  * delegate those votes to itself if it wishes to participate in decisions and does not have a trusted representative.
  *
  * This contract is often combined with a token contract such that voting units correspond to token units. For an
- * example, see {ERC721Votes}.
+ * example, see {ERC20VotesPartialDelegationUpgradeable}.
  *
  * The full history of delegate votes is tracked on-chain so that governance protocols can consider votes as distributed
  * at a particular block number to protect against flash loans and double voting. The opt-in delegate system makes the
@@ -42,22 +40,22 @@ abstract contract VotesPartialDelegationUpgradeable is
 {
   using Checkpoints for Checkpoints.Trace208;
 
-  /// @notice Emitted when an invalid signature is provided.
+  /// @notice Invalid signature is provided.
   error InvalidSignature();
 
-  /// @notice Emitted when address zero is provided as admin.
+  /// @notice Address zero is provided as admin.
   error InvalidAddressZero();
 
-  /// @notice Emitted when the number of delegatees exceeds the limit.
+  /// @notice The number of delegatees exceeds the limit.
   error PartialDelegationLimitExceeded(uint256 length, uint256 max);
 
-  /// @notice Emitted when the provided delegatee list is not sorted or contains duplicates.
+  /// @notice The provided delegatee list is not sorted or contains duplicates.
   error DuplicateOrUnsortedDelegatees(address delegatee);
 
-  /// @notice Emitted when the provided numerator is zero.
+  /// @notice The provided numerator is zero.
   error InvalidNumeratorZero();
 
-  /// @notice Emitted when the sum of the numerators exceeds the denominator.
+  /// @notice The sum of the numerators exceeds the denominator.
   error NumeratorSumExceedsDenominator(uint256 numerator, uint96 denominator);
 
   /// @notice Typehash for legacy delegation.

@@ -1,11 +1,10 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.24;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
 import {console} from "forge-std/Test.sol";
-import {L2GovToken} from "../src/L2GovToken.sol";
+import {L2GovToken} from "src/L2GovToken.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {PartialDelegation, DelegationAdjustment} from "../src/IVotesPartialDelegation.sol";
-import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
+import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {DelegationAndEventHelpers} from "./helpers/DelegationAndEventHelpers.sol";
@@ -37,7 +36,7 @@ contract L2GovTest is L2GovTestPreInit {
 }
 
 contract Initialize is L2GovTestPreInit {
-  /// @notice Emitted when address zero is provided as admin.
+  /// @notice Address zero is provided as admin.
   error InvalidAddressZero();
 
   function testInitialize(address _admin) public {
@@ -63,7 +62,7 @@ contract Initialize is L2GovTestPreInit {
 }
 
 contract Mint is L2GovTest {
-  function testFuzz_Mints(address _actor, address _account, uint208 _amount) public {
+  function testFuzz_CorrectlyMints(address _actor, address _account, uint208 _amount) public {
     vm.assume(_actor != address(0));
     vm.assume(_account != address(0));
     vm.startPrank(admin);
