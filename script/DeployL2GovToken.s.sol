@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import {Script, console} from "forge-std/Script.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {L2GovToken} from "src/L2GovToken.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 contract DeployL2GovToken is Script {
@@ -14,12 +13,14 @@ contract DeployL2GovToken is Script {
   L2GovToken proxy;
 
   function setUp() public virtual {
-    deployer = vm.envAddress("DEPLOYER_ADDRESS");
-    console.log("Deployer address:\t", deployer);
+    console.log("Deployer address:\t", msg.sender);
     proxyAdmin = vm.envAddress("PROXY_ADMIN_ADDRESS");
     console.log("Proxy admin address:\t", proxyAdmin);
     tokenAdmin = vm.envAddress("TOKEN_ADMIN_ADDRESS");
     console.log("Token admin address:\t", tokenAdmin);
+    if (proxyAdmin == tokenAdmin) {
+      revert("Proxy admin and token admin must be different");
+    }
   }
 
   function run() public virtual {

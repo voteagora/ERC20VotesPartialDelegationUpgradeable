@@ -12,6 +12,9 @@ contract DeployAndMintToAdminAndTesters is DeployL2GovToken {
 
   function run() public virtual override {
     super.run();
+    if (msg.sender != tokenAdmin) {
+      revert("Address running the script must be the token admin. Set token admin to deployer address.");
+    }
     vm.startBroadcast(tokenAdmin);
     proxy.grantRole(proxy.MINTER_ROLE(), tokenAdmin);
     // Minting to admin and testing mnemonic accounts
