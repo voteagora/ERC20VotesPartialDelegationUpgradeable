@@ -8,12 +8,11 @@ import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 contract DeployAndMintToAdminAndTesters is DeployL2GovToken {
   function setUp() public virtual override {
     super.setUp();
-    // tokenAdmin = deployer.addr;
   }
 
   function run() public virtual override {
     super.run();
-    vm.startBroadcast(deployer.privateKey);
+    vm.startBroadcast(tokenAdmin);
     proxy.grantRole(proxy.MINTER_ROLE(), tokenAdmin);
     // Minting to admin and testing mnemonic accounts
     mintToAdminAndTesters();

@@ -8,23 +8,22 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
 contract DeployL2GovToken is Script {
-  Vm.Wallet deployer;
+  address deployer;
   address proxyAdmin;
   address tokenAdmin;
   L2GovToken proxy;
 
   function setUp() public virtual {
-    uint256 deployerPrivateKey = vm.envOr("DEPLOYER_PRIVATE_KEY", uint256(12));
-    deployer = vm.createWallet(deployerPrivateKey);
-    console.log("Deployer address:\t", deployer.addr);
-    proxyAdmin = vm.envOr("PROXY_ADMIN_ADDRESS", deployer.addr);
+    deployer = vm.envAddress("DEPLOYER_ADDRESS");
+    console.log("Deployer address:\t", deployer);
+    proxyAdmin = vm.envAddress("PROXY_ADMIN_ADDRESS");
     console.log("Proxy admin address:\t", proxyAdmin);
-    tokenAdmin = vm.envOr("TOKEN_ADMIN_ADDRESS", deployer.addr);
+    tokenAdmin = vm.envAddress("TOKEN_ADMIN_ADDRESS");
     console.log("Token admin address:\t", tokenAdmin);
   }
 
   function run() public virtual {
-    vm.startBroadcast(deployer.privateKey);
+    vm.startBroadcast(deployer);
     L2GovToken token = new L2GovToken();
     console.log("L2GovToken impl:\t", address(token));
     proxy = L2GovToken(
