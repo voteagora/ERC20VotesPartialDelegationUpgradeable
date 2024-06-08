@@ -8,13 +8,13 @@ import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 contract DeployAndMintToAdminAndTesters is DeployL2GovToken {
   function setUp() public virtual override {
     super.setUp();
-    admin = deployer.addr;
+    // tokenAdmin = deployer.addr;
   }
 
   function run() public virtual override {
     super.run();
     vm.startBroadcast(deployer.privateKey);
-    proxy.grantRole(proxy.MINTER_ROLE(), admin);
+    proxy.grantRole(proxy.MINTER_ROLE(), tokenAdmin);
     // Minting to admin and testing mnemonic accounts
     mintToAdminAndTesters();
     // Delegating to testing mnemonic accounts
@@ -30,8 +30,8 @@ contract DeployAndMintToAdminAndTesters is DeployL2GovToken {
     testers[3] = 0x4D5124802eE0C8782b3092E8d2D058caD345b290;
     testers[4] = 0xa6B883a217D343585DC8f436d277Eae917B77f95;
 
-    proxy.mint(admin, 1_000_000 ether);
-    console.log("Admin token balance:\t", proxy.balanceOf(admin));
+    proxy.mint(tokenAdmin, 1_000_000 ether);
+    console.log("Token admin token balance:\t", proxy.balanceOf(tokenAdmin));
     for (uint256 i = 0; i < testers.length; i++) {
       proxy.mint(testers[i], 100_000 ether);
       console.log("Tester: ", testers[i], "\tToken balance: ", proxy.balanceOf(testers[i]));
