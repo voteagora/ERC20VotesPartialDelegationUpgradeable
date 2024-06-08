@@ -457,7 +457,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    * should be zero. Total supply of voting units will be adjusted with mints and burns.
    */
   function _transferVotingUnits(address from, address to, uint256 amount) internal virtual {
-    // skip from==to case, as the math would require special handling for a no-op
+    // skip from==to no-op, as the math would require special handling
     if (from == to) {
       return;
     }
@@ -472,17 +472,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     }
 
     // finally, calculate delegatee vote changes and create checkpoints accordingly
-    _calculateDelegateVoteAdjustmentsAndCreateCheckpoints(from, to, amount);
-  }
-
-  /**
-   * @dev Calculate the vote weight adjustments for `from` and `to` delegatees and create checkpoints accordingly.
-   */
-  function _calculateDelegateVoteAdjustmentsAndCreateCheckpoints(address from, address to, uint256 amount)
-    internal
-    virtual
-  {
-    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     DelegationAdjustment[] memory _delegationAdjustmentsFrom = new DelegationAdjustment[]($._delegatees[from].length);
     // We'll need to adjust the delegatee votes for both "from" and "to" delegatee sets.
     if ($._delegatees[from].length > 0) {

@@ -261,8 +261,6 @@ contract Delegate is PartialDelegationTest {
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
 
-    DelegationAdjustment[] memory _votes = tokenProxy.exposed_calculateWeightDistribution(delegations, _amount);
-
     _expectEmitDelegateVotesChangedEvents(_amount, new PartialDelegation[](0), delegations);
     tokenProxy.delegate(delegations);
     vm.stopPrank();
