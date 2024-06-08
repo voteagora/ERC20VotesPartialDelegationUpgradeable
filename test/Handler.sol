@@ -65,6 +65,13 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     tokenProxy.mint(_amount);
   }
 
+  function _adjustDelegatorRemainder(address _delegator) public {
+    (, uint208 _remainder) = _calculateWeightDistributionAndRemainder(
+      tokenProxy.delegates(_delegator), uint208(tokenProxy.balanceOf(_delegator))
+    );
+    ghost_delegatorVoteRemainder[_delegator] = _remainder;
+  }
+
   function _createValidPartialDelegation(uint256 _n, uint256 _seed) internal returns (PartialDelegation[] memory) {
     _seed = bound(
       _seed,
@@ -116,13 +123,6 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     } else {
       _adjustDelegatorRemainder(_holder);
     }
-  }
-
-  function _adjustDelegatorRemainder(address _delegator) public {
-    (, uint208 _remainder) = _calculateWeightDistributionAndRemainder(
-      tokenProxy.delegates(_delegator), uint208(tokenProxy.balanceOf(_delegator))
-    );
-    ghost_delegatorVoteRemainder[_delegator] = _remainder;
   }
 
   function handler_mintAndDelegateSingle(address _holder, uint256 _amount, address _delegatee)
