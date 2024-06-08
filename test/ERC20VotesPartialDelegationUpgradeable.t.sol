@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.8.24;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
 
 import {console, StdStorage, stdStorage, Vm} from "forge-std/Test.sol";
 import {DelegationAndEventHelpers} from "./helpers/DelegationAndEventHelpers.sol";
@@ -9,7 +9,7 @@ import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.s
 import {PartialDelegation, DelegationAdjustment} from "src/IVotesPartialDelegation.sol";
 
 contract PartialDelegationTest is DelegationAndEventHelpers {
-  /// @notice Emitted when an invalid signature is provided.
+  /// @notice An invalid signature is provided.
   error InvalidSignature();
   /// @dev The nonce used for an `account` is not the expected current nonce.
   error InvalidAccountNonce(address account, uint256 currentNonce);
@@ -26,7 +26,6 @@ contract PartialDelegationTest is DelegationAndEventHelpers {
 
   FakeERC20VotesPartialDelegationUpgradeable public tokenImpl;
   FakeERC20VotesPartialDelegationUpgradeable public tokenProxy;
-  // console2.log(uint(_domainSeparatorV4()))
   bytes32 DOMAIN_SEPARATOR;
 
   function setUp() public virtual {

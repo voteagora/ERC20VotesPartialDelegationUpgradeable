@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts (last updated v5.0.0) (token/ERC20/extensions/ERC20Votes.sol)
-
 pragma solidity ^0.8.20;
 
 import {ERC20PermitUpgradeable} from
@@ -10,12 +8,12 @@ import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 /**
- * @dev ERC20VotesUpgradeable except supports partial delegation via VotesPartialDelegationUpgradeable.
+ * @dev ERC20VotesUpgradeable with the addition of partial delegation via VotesPartialDelegationUpgradeable.
  * Supports token supply up to 2^208^ - 1.
  *
  * This extension keeps a history (checkpoints) of each account's vote power. Vote power can be delegated either
  * by calling the {delegate} function directly, or by providing a signature to be used with {delegateBySig} or
- * {delegateOnBehalf}.
+ * {delegatePartiallyOnBehalf}.
  * Voting power can be queried through the public accessors {getVotes} and {getPastVotes}.
  *
  * By default, token balance does not account for voting power. This makes transfers cheaper. The downside is that it
