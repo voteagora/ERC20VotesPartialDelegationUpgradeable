@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {ERC20VotesPartialDelegationUpgradeable} from "src/ERC20VotesPartialDelegationUpgradeable.sol";
 
@@ -9,7 +8,7 @@ import {ERC20VotesPartialDelegationUpgradeable} from "src/ERC20VotesPartialDeleg
  * @title L2GovToken
  * @notice An upgradeable L2 token contract supporting partial delegation via ERC20VotesPartialDelegationUpgradeable.
  */
-contract L2GovToken is UUPSUpgradeable, AccessControlUpgradeable, ERC20VotesPartialDelegationUpgradeable {
+contract L2GovToken is AccessControlUpgradeable, ERC20VotesPartialDelegationUpgradeable {
   bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
   bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
 
@@ -53,9 +52,4 @@ contract L2GovToken is UUPSUpgradeable, AccessControlUpgradeable, ERC20VotesPart
   function burn(address _account, uint256 _value) public onlyRole(BURNER_ROLE) {
     _burn(_account, _value);
   }
-
-  /**
-   * @dev Limit UUPS upgrade to DEFAULT_ADMIN_ROLE.
-   */
-  function _authorizeUpgrade(address) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
 }
