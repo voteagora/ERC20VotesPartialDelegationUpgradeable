@@ -40,22 +40,22 @@ abstract contract VotesPartialDelegationUpgradeable is
 {
   using Checkpoints for Checkpoints.Trace208;
 
-  /// @notice Emitted when an invalid signature is provided.
+  /// @notice Invalid signature is provided.
   error InvalidSignature();
 
-  /// @notice Emitted when address zero is provided as admin.
+  /// @notice Address zero is provided as admin.
   error InvalidAddressZero();
 
-  /// @notice Emitted when the number of delegatees exceeds the limit.
+  /// @notice The number of delegatees exceeds the limit.
   error PartialDelegationLimitExceeded(uint256 length, uint256 max);
 
-  /// @notice Emitted when the provided delegatee list is not sorted or contains duplicates.
+  /// @notice The provided delegatee list is not sorted or contains duplicates.
   error DuplicateOrUnsortedDelegatees(address delegatee);
 
-  /// @notice Emitted when the provided numerator is zero.
+  /// @notice The provided numerator is zero.
   error InvalidNumeratorZero();
 
-  /// @notice Emitted when the sum of the numerators exceeds the denominator.
+  /// @notice The sum of the numerators exceeds the denominator.
   error NumeratorSumExceedsDenominator(uint256 numerator, uint96 denominator);
 
   /// @notice Typehash for legacy delegation.
