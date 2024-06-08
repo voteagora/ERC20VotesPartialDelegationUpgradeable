@@ -1156,14 +1156,6 @@ contract Transfer is PartialDelegationTest {
     vm.stopPrank();
   }
 
-  function testFuzz_CreatesVotesWhenSenderHasNotDelegated() public {
-    vm.skip(true);
-  }
-
-  function testFuzz_RemovesVotesWhenReceiverHasNotDelegated() public {
-    vm.skip(true);
-  }
-
   function testFuzz_HandlesTransfersToSelf(address _holder, uint256 _transferAmount, uint256 _existingBalance) public {
     vm.assume(_holder != address(0));
     _transferAmount = bound(_transferAmount, 0, type(uint208).max);
@@ -1319,26 +1311,6 @@ contract Permit is PartialDelegationTest {
     vm.expectRevert(abi.encodeWithSelector(ERC2612ExpiredSignature.selector, _deadline));
     tokenProxy.permit(_holder, _receiver, _transferAmount, _deadline, _v, _r, _s);
     vm.stopPrank();
-  }
-}
-
-contract Integration is PartialDelegationTest {
-  function testFuzz_DelegateAndTransferAndDelegate(
-    address _actor,
-    address _delegatee1,
-    address _delegatee2,
-    uint256 _amount
-  ) public {
-    vm.skip(true);
-  }
-
-  function testFuzz_DelegateAndTransferAndDelegateAndTransfer(
-    address _actor,
-    address _delegatee1,
-    address _delegatee2,
-    uint256 _amount
-  ) public {
-    vm.skip(true);
   }
 }
 
