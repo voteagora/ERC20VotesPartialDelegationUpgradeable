@@ -316,25 +316,26 @@ abstract contract VotesPartialDelegationUpgradeable is
     PartialDelegation[] memory _oldDelegations = delegates(_delegator);
     uint256 _oldDelegateLength = _oldDelegations.length;
     DelegationAdjustment[] memory _old = new DelegationAdjustment[](_oldDelegateLength);
+    uint256 _delegatorVotes = _getVotingUnits(_delegator);
     if (_oldDelegateLength > 0) {
-      _old = _calculateWeightDistribution(_oldDelegations, _getVotingUnits(_delegator));
+      _old = _calculateWeightDistribution(_oldDelegations, _delegatorVotes);
     }
 
     // Calculate adjustments for new delegatee set.
-    DelegationAdjustment[] memory _new = _calculateWeightDistribution(_newDelegations, _getVotingUnits(_delegator));
+    DelegationAdjustment[] memory _new = _calculateWeightDistribution(_newDelegations, _delegatorVotes);
 
     // Now we want a collated list of all delegatee changes, combining the old subtractions with the new additions.
     // Ideally we'd like to process this only once.
     _aggregateDelegationAdjustmentsAndCreateCheckpoints(_old, _new);
 
     // The rest of this method body replaces in storage the old delegatees with the new ones.
-    // keep track of last delegatee to ensure ordering / uniqueness
+    // keep track of last delegatee to ensure ordering / uniqueness:
     address _lastDelegatee;
     PartialDelegation[] memory _oldDelegates = $._delegatees[_delegator];
 
     for (uint256 i = 0; i < _newDelegations.length; i++) {
       // check sorting and uniqueness
-      if (i == 0 && _newDelegations[i]._delegatee == address(0)) {
+      if (i != 0 && _newDelegations[i]._delegatee == address(0)) {
         // zero delegation is allowed if in 0th position
       } else if (_newDelegations[i]._delegatee <= _lastDelegatee) {
         revert DuplicateOrUnsortedDelegatees(_newDelegations[i]._delegatee);

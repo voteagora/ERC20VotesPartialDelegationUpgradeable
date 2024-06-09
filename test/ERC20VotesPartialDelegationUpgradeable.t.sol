@@ -240,6 +240,34 @@ contract Delegate is PartialDelegationTest {
     assertCorrectVotes(delegations, _amount);
   }
 
+  function testFuzz_DelegatesToNAddressesAndThenDelegatesToOtherAddresses(
+    address _actor,
+    uint256 _amount,
+    uint256 _n,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+    assertEq(tokenProxy.delegates(_actor), delegations);
+    PartialDelegation[] memory newDelegations = _createValidPartialDelegation( /* setting n to 0 here means seed will
+      generate random n */ 0, uint256(keccak256(abi.encode(_seed))));
+    vm.startPrank(_actor);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+    assertEq(tokenProxy.delegates(_actor), newDelegations);
+    assertCorrectVotes(newDelegations, _amount);
+    // initial delegates should have 0 vote power (assuming set union is empty)
+    for (uint256 i = 0; i < delegations.length; i++) {
+      assertEq(tokenProxy.getVotes(delegations[i]._delegatee), 0, "initial delegate has vote power");
+    }
+  }
+
   function testFuzz_EmitsDelegateChangedEvents(address _actor, uint256 _amount, uint256 _n, uint256 _seed) public {
     vm.assume(_actor != address(0));
     _amount = bound(_amount, 0, type(uint208).max);
@@ -448,34 +476,6 @@ contract Delegate is PartialDelegationTest {
     _expectEmitDelegateVotesChangedEvents(_amount, oldDelegations, newDelegations);
     tokenProxy.delegate(newDelegations);
     vm.stopPrank();
-  }
-
-  function testFuzz_DelegatesToNAddressesAndThenDelegatesToOtherAddresses(
-    address _actor,
-    uint256 _amount,
-    uint256 _n,
-    uint256 _seed
-  ) public {
-    vm.assume(_actor != address(0));
-    _amount = bound(_amount, 0, type(uint208).max);
-    _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
-    PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
-    vm.startPrank(_actor);
-    tokenProxy.mint(_amount);
-    tokenProxy.delegate(delegations);
-    vm.stopPrank();
-    assertEq(tokenProxy.delegates(_actor), delegations);
-    PartialDelegation[] memory newDelegations = _createValidPartialDelegation( /* setting n to 0 here means seed will
-      generate random n */ 0, uint256(keccak256(abi.encode(_seed))));
-    vm.startPrank(_actor);
-    tokenProxy.delegate(newDelegations);
-    vm.stopPrank();
-    assertEq(tokenProxy.delegates(_actor), newDelegations);
-    assertCorrectVotes(newDelegations, _amount);
-    // initial delegates should have 0 vote power (assuming set union is empty)
-    for (uint256 i = 0; i < delegations.length; i++) {
-      assertEq(tokenProxy.getVotes(delegations[i]._delegatee), 0, "initial delegate has vote power");
-    }
   }
 
   function testFuzz_RevertIf_DelegationArrayIncludesDuplicates(
