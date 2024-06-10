@@ -27,7 +27,7 @@ contract L2GovTest is L2GovTestPreInit {
 
   function setUp() public override {
     super.setUp();
-    tokenProxy.initialize(admin);
+    tokenProxy.initialize(admin, "L2 Governance Token", "gL2");
     vm.startPrank(admin);
     tokenProxy.grantRole(tokenProxy.MINTER_ROLE(), minter);
     tokenProxy.grantRole(tokenProxy.BURNER_ROLE(), burner);
@@ -39,25 +39,25 @@ contract Initialize is L2GovTestPreInit {
   /// @notice Address zero is provided as admin.
   error InvalidAddressZero();
 
-  function testInitialize(address _admin) public {
+  function testInitialize(address _admin, string memory _name, string memory _symbol) public {
     vm.assume(_admin != address(0));
     assertEq(tokenProxy.name(), "");
     assertEq(tokenProxy.symbol(), "");
-    tokenProxy.initialize(_admin);
-    assertEq(tokenProxy.name(), "L2 Governance Token");
-    assertEq(tokenProxy.symbol(), "gL2");
+    tokenProxy.initialize(_admin, _name, _symbol);
+    assertEq(tokenProxy.name(), _name);
+    assertEq(tokenProxy.symbol(), _symbol);
   }
 
-  function test_RevertIf_InitializeTwice(address _admin) public {
+  function test_RevertIf_InitializeTwice(address _admin, string memory _name, string memory _symbol) public {
     vm.assume(_admin != address(0));
-    tokenProxy.initialize(_admin);
+    tokenProxy.initialize(_admin, _name, _symbol);
     vm.expectRevert(Initializable.InvalidInitialization.selector);
-    tokenProxy.initialize(_admin);
+    tokenProxy.initialize(_admin, _name, _symbol);
   }
 
   function test_RevertIf_InvalidAddressZero() public {
     vm.expectRevert(InvalidAddressZero.selector);
-    tokenProxy.initialize(address(0));
+    tokenProxy.initialize(address(0), "L2 Governance Token", "gL2");
   }
 }
 

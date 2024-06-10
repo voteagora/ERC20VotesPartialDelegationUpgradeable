@@ -30,7 +30,9 @@ contract DeployL2GovToken is Script {
     proxy = L2GovToken(
       address(
         new TransparentUpgradeableProxy(
-          address(token), proxyAdmin, abi.encodeWithSelector(token.initialize.selector, tokenAdmin)
+          address(token),
+          proxyAdmin,
+          abi.encodeWithSelector(token.initialize.selector, tokenAdmin, "L2 Governance Token", "gL2")
         )
       )
     );
