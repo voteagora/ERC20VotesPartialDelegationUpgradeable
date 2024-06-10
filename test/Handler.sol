@@ -57,7 +57,8 @@ contract Handler is CommonBase, StdCheats, StdUtils {
   }
 
   function _useActor(AddressSet storage _set, uint256 _randomActorSeed) internal view returns (address) {
-    return _set.rand(_randomActorSeed);
+    address _actor = _set.rand(_randomActorSeed);
+    vm.assume(_actor != address(0));
   }
 
   function _mintToken(address _to, uint256 _amount) internal {
