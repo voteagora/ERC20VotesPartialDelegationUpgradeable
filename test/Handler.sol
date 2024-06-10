@@ -5,9 +5,9 @@ import {CommonBase} from "forge-std/Base.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {StdUtils} from "forge-std/StdUtils.sol";
 import {console} from "forge-std/console.sol";
-import {AddressSet, LibAddressSet} from "./helpers/AddressSet.sol";
 import {PartialDelegation, DelegationAdjustment} from "src/IVotesPartialDelegation.sol";
-import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
+import {AddressSet, LibAddressSet} from "test/helpers/AddressSet.sol";
+import {FakeERC20VotesPartialDelegationUpgradeable} from "test/fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
 
 contract Handler is CommonBase, StdCheats, StdUtils {
   using LibAddressSet for AddressSet;

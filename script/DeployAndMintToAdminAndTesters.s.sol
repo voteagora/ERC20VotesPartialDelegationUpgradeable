@@ -2,8 +2,8 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {DeployL2GovToken} from "./DeployL2GovToken.s.sol";
 import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
+import {DeployL2GovToken} from "script/DeployL2GovToken.s.sol";
 
 contract DeployAndMintToAdminAndTesters is DeployL2GovToken {
   function setUp() public virtual override {

@@ -2,10 +2,10 @@
 pragma solidity ^0.8.20;
 
 import {console, StdStorage, stdStorage, Vm} from "forge-std/Test.sol";
-import {DelegationAndEventHelpers} from "./helpers/DelegationAndEventHelpers.sol";
-import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
-import {MockERC1271Signer} from "./helpers/MockERC1271Signer.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {DelegationAndEventHelpers} from "test/helpers/DelegationAndEventHelpers.sol";
+import {FakeERC20VotesPartialDelegationUpgradeable} from "test/fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
+import {MockERC1271Signer} from "test/helpers/MockERC1271Signer.sol";
 import {PartialDelegation, DelegationAdjustment} from "src/IVotesPartialDelegation.sol";
 
 contract PartialDelegationTest is DelegationAndEventHelpers {
