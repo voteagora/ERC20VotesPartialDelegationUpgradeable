@@ -66,6 +66,23 @@ contract PartialDelegationTest is DelegationAndEventHelpers {
     assertLe(_totalWeight, _amount, "incorrect total weight");
   }
 
+  function assertCorrectPastVotes(PartialDelegation[] memory _delegations, uint256 _amount, uint256 _timepoint)
+    internal
+  {
+    DelegationAdjustment[] memory _votes = tokenProxy.exposed_calculateWeightDistribution(_delegations, _amount);
+    uint256 _totalWeight = 0;
+    for (uint256 i = 0; i < _delegations.length; i++) {
+      uint256 _expectedVoteWeight = _votes[i]._amount;
+      assertEq(
+        tokenProxy.getPastVotes(_delegations[i]._delegatee, _timepoint),
+        _expectedVoteWeight,
+        "incorrect past vote weight for delegate"
+      );
+      _totalWeight += _votes[i]._amount;
+    }
+    assertLe(_totalWeight, _amount, "incorrect total weight");
+  }
+
   function _mint(address _to, uint256 _amount) internal {
     vm.prank(_to);
     tokenProxy.mint(_amount);
@@ -240,6 +257,34 @@ contract Delegate is PartialDelegationTest {
     assertCorrectVotes(delegations, _amount);
   }
 
+  function testFuzz_DelegatesToNAddressesAndThenDelegatesToOtherAddresses(
+    address _actor,
+    uint256 _amount,
+    uint256 _n,
+    uint256 _seed
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+    assertEq(tokenProxy.delegates(_actor), delegations);
+    PartialDelegation[] memory newDelegations = _createValidPartialDelegation( /* setting n to 0 here means seed will
+      generate random n */ 0, uint256(keccak256(abi.encode(_seed))));
+    vm.startPrank(_actor);
+    tokenProxy.delegate(newDelegations);
+    vm.stopPrank();
+    assertEq(tokenProxy.delegates(_actor), newDelegations);
+    assertCorrectVotes(newDelegations, _amount);
+    // initial delegates should have 0 vote power (assuming set union is empty)
+    for (uint256 i = 0; i < delegations.length; i++) {
+      assertEq(tokenProxy.getVotes(delegations[i]._delegatee), 0, "initial delegate has vote power");
+    }
+  }
+
   function testFuzz_EmitsDelegateChangedEvents(address _actor, uint256 _amount, uint256 _n, uint256 _seed) public {
     vm.assume(_actor != address(0));
     _amount = bound(_amount, 0, type(uint208).max);
@@ -260,8 +305,6 @@ contract Delegate is PartialDelegationTest {
     PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
-
-    DelegationAdjustment[] memory _votes = tokenProxy.exposed_calculateWeightDistribution(delegations, _amount);
 
     _expectEmitDelegateVotesChangedEvents(_amount, new PartialDelegation[](0), delegations);
     tokenProxy.delegate(delegations);
@@ -450,34 +493,6 @@ contract Delegate is PartialDelegationTest {
     _expectEmitDelegateVotesChangedEvents(_amount, oldDelegations, newDelegations);
     tokenProxy.delegate(newDelegations);
     vm.stopPrank();
-  }
-
-  function testFuzz_DelegatesToNAddressesAndThenDelegatesToOtherAddresses(
-    address _actor,
-    uint256 _amount,
-    uint256 _n,
-    uint256 _seed
-  ) public {
-    vm.assume(_actor != address(0));
-    _amount = bound(_amount, 0, type(uint208).max);
-    _n = bound(_n, 1, tokenProxy.MAX_PARTIAL_DELEGATIONS());
-    PartialDelegation[] memory delegations = _createValidPartialDelegation(_n, _seed);
-    vm.startPrank(_actor);
-    tokenProxy.mint(_amount);
-    tokenProxy.delegate(delegations);
-    vm.stopPrank();
-    assertEq(tokenProxy.delegates(_actor), delegations);
-    PartialDelegation[] memory newDelegations = _createValidPartialDelegation( /* setting n to 0 here means seed will
-      generate random n */ 0, uint256(keccak256(abi.encode(_seed))));
-    vm.startPrank(_actor);
-    tokenProxy.delegate(newDelegations);
-    vm.stopPrank();
-    assertEq(tokenProxy.delegates(_actor), newDelegations);
-    assertCorrectVotes(newDelegations, _amount);
-    // initial delegates should have 0 vote power (assuming set union is empty)
-    for (uint256 i = 0; i < delegations.length; i++) {
-      assertEq(tokenProxy.getVotes(delegations[i]._delegatee), 0, "initial delegate has vote power");
-    }
   }
 
   function testFuzz_RevertIf_DelegationArrayIncludesDuplicates(
@@ -1314,10 +1329,57 @@ contract Permit is PartialDelegationTest {
   }
 }
 
-contract ExpectEmitDelegateChangedEvents is PartialDelegationTest {
-  // Source of truth events: The events that are emitted after helpers are the events expect helper should expect, given
-  // the delegation changes.
+contract GetPastVotes is PartialDelegationTest {
+  function testFuzz_ReturnsCorrectVotes(address _actor, uint256 _amount, uint48 _blocksAhead, uint256 _secondMint)
+    public
+  {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _secondMint = bound(_secondMint, 0, type(uint208).max - _amount);
+    uint256 _blockNo = vm.getBlockNumber();
+    _blocksAhead = uint48(bound(_blocksAhead, 1, type(uint48).max - _blockNo));
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    vm.stopPrank();
+    PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_actor))));
+    vm.startPrank(_actor);
+    tokenProxy.delegate(_delegations);
+    vm.stopPrank();
+    vm.roll(_blockNo + _blocksAhead);
+    vm.startPrank(_actor);
+    // do a second mint that will increase delegatees' votes
+    tokenProxy.mint(_secondMint);
+    vm.stopPrank();
+    assertCorrectPastVotes(_delegations, _amount, _blockNo);
+    assertCorrectVotes(_delegations, _amount + _secondMint);
+  }
+}
 
+contract GetPastTotalSupply is PartialDelegationTest {
+  function testFuzz_ReturnsCorrectPastTotalSupply(
+    address _actor,
+    uint256 _amount,
+    uint48 _blocksAhead,
+    uint256 _secondMint
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _secondMint = bound(_secondMint, 0, type(uint208).max - _amount);
+    uint256 _blockNo = vm.getBlockNumber();
+    _blocksAhead = uint48(bound(_blocksAhead, 1, type(uint48).max - _blockNo));
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    vm.roll(_blockNo + _blocksAhead);
+    // do a second mint that will increase total supply
+    tokenProxy.mint(_secondMint);
+    vm.stopPrank();
+    assertEq(tokenProxy.totalSupply(), _amount + _secondMint);
+    assertEq(tokenProxy.getPastTotalSupply(_blockNo), _amount);
+  }
+}
+
+// This contract strengthens our confidence in our test helper, `_expectEmitDelegateChangedEvents`
+contract ExpectEmitDelegateChangedEvents is PartialDelegationTest {
   function test_EmitsWhenFromNoDelegateeToANewDelegateeIsAdded() public {
     address _actor = address(this);
     PartialDelegation[] memory _oldDelegations = new PartialDelegation[](0);
@@ -1442,6 +1504,7 @@ contract ExpectEmitDelegateChangedEvents is PartialDelegationTest {
   }
 }
 
+// This contract strengthens our confidence in our test helper, `_expectEmitDelegateVotesChangedEvents`
 contract ExpectEmitDelegateVotesChangedEvents is PartialDelegationTest {
   /// An Ethereum log. Returned by `getRecordedLogs`.
 
@@ -1550,6 +1613,7 @@ contract ExpectEmitDelegateVotesChangedEvents is PartialDelegationTest {
   }
 }
 
+// This contract strengthens our confidence in our test helper, `_expectEmitDelegateChangedEvents` (the 4 param version)
 contract ExpectEmitDelegateVotesChangedEventsDuringTransfer is PartialDelegationTest {
   function test_EmitsWhenTransferringTokensFromAnAddressWithNoDelegationsToAnAddressWithNoDelegations() public {
     address from = address(0x10);

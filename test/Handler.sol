@@ -208,6 +208,48 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     _adjustDelegatorRemainder(_currentActor);
   }
 
+  function handler_invalidTransfer(uint256 _amount, address _actor, address _to) public countCall("invalidTransfer") {
+    if (uint160(_actor) % 2 == 0) {
+      _actor = _useActor(_holders, uint160(_actor));
+    }
+    _amount = bound(_amount, tokenProxy.balanceOf(_actor) + 1, type(uint256).max);
+    _to = _boundToNonZeroAddress(_to);
+    vm.prank(_actor);
+    // vm.expectRevert();
+    tokenProxy.transfer(_to, _amount);
+  }
+
+  function handler_invalidDelegation(uint256 _delegationSeed) public countCall("invalidDelegation") {
+    PartialDelegation[] memory _delegations =
+      _makeDelegationInvalid(_createValidPartialDelegation(0, _delegationSeed), _delegationSeed);
+    // vm.expectRevert();
+    tokenProxy.delegate(_delegations);
+  }
+
+  function _makeDelegationInvalid(PartialDelegation[] memory _delegations, uint256 _seed)
+    internal
+    view
+    returns (PartialDelegation[] memory)
+  {
+    uint256 _index = _delegations.length % uint256(keccak256(abi.encode(_seed)));
+    if (_seed % 3 == 0) {
+      // numerator zero
+      _delegations[_index]._numerator = 0;
+    } else if (_seed % 3 == 1 && _delegations.length > 2) {
+      // duplicate delegatee
+      address _replacementDelegatee = _index == 0 ? _delegations[1]._delegatee : _delegations[0]._delegatee;
+      _delegations[_index]._delegatee = _replacementDelegatee;
+    } else {
+      // numerators that sum to greater than DENOMINATOR
+      uint96 _sum = 0;
+      for (uint256 i = 0; i < _delegations.length; i++) {
+        _sum += _delegations[i]._numerator;
+      }
+      _delegations[_index]._numerator = (tokenProxy.DENOMINATOR() - _sum) + uint96(_seed % 100);
+    }
+    return _delegations;
+  }
+
   function handler_callSummary() external view {
     console.log("\nCall summary:");
     console.log("-------------------");
@@ -218,6 +260,8 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     console.log("handler_undelegate", calls["handler_undelegate"]);
     console.log("handler_validNonZeroTransferToDelegator", calls["validNonZeroTransferToDelegator"]);
     console.log("handler_validNonZeroTransferToNonDelegator", calls["validNonZeroTransferToNonD"]);
+    console.log("handler_invalidTransfer", calls["invalidTransfer"]);
+    console.log("handler_invalidDelegation", calls["invalidDelegation"]);
     console.log("-------------------\n");
   }
 

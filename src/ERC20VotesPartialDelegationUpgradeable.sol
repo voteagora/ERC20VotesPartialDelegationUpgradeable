@@ -53,9 +53,8 @@ abstract contract ERC20VotesPartialDelegationUpgradeable is
    * Emits one or more {IVotes-DelegateVotesChanged} events.
    */
   function _update(address from, address to, uint256 value) internal virtual override {
-    // transfer voting units **before** updating balances
-    _transferVotingUnits(from, to, value);
     super._update(from, to, value);
+    _transferVotingUnits(from, to, value);
     if (from == address(0)) {
       uint256 supply = totalSupply();
       uint256 cap = _maxSupply();

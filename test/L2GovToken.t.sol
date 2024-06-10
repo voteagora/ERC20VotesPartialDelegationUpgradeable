@@ -90,7 +90,7 @@ contract Mint is L2GovTest {
   }
 
   function testFuzz_RevertIf_NotMinter(address _actor, address _account, uint208 _amount) public {
-    vm.assume(_account != address(0));
+    vm.assume(_account != address(0) && _actor != minter);
     vm.expectRevert(
       abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, _actor, tokenProxy.MINTER_ROLE())
     );
@@ -133,7 +133,7 @@ contract Burn is L2GovTest {
   }
 
   function testFuzz_RevertIf_NotBurner(address _actor, address _account, uint208 _amount) public {
-    vm.assume(_account != address(0));
+    vm.assume(_account != address(0) && _actor != burner);
     vm.expectRevert(
       abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, _actor, tokenProxy.BURNER_ROLE())
     );

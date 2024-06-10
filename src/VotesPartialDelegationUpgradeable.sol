@@ -316,19 +316,20 @@ abstract contract VotesPartialDelegationUpgradeable is
     PartialDelegation[] memory _oldDelegations = delegates(_delegator);
     uint256 _oldDelegateLength = _oldDelegations.length;
     DelegationAdjustment[] memory _old = new DelegationAdjustment[](_oldDelegateLength);
+    uint256 _delegatorVotes = _getVotingUnits(_delegator);
     if (_oldDelegateLength > 0) {
-      _old = _calculateWeightDistribution(_oldDelegations, _getVotingUnits(_delegator));
+      _old = _calculateWeightDistribution(_oldDelegations, _delegatorVotes);
     }
 
     // Calculate adjustments for new delegatee set.
-    DelegationAdjustment[] memory _new = _calculateWeightDistribution(_newDelegations, _getVotingUnits(_delegator));
+    DelegationAdjustment[] memory _new = _calculateWeightDistribution(_newDelegations, _delegatorVotes);
 
     // Now we want a collated list of all delegatee changes, combining the old subtractions with the new additions.
     // Ideally we'd like to process this only once.
     _aggregateDelegationAdjustmentsAndCreateCheckpoints(_old, _new);
 
     // The rest of this method body replaces in storage the old delegatees with the new ones.
-    // keep track of last delegatee to ensure ordering / uniqueness
+    // keep track of last delegatee to ensure ordering / uniqueness:
     address _lastDelegatee;
     PartialDelegation[] memory _oldDelegates = $._delegatees[_delegator];
 
@@ -382,6 +383,59 @@ abstract contract VotesPartialDelegationUpgradeable is
         j++;
       }
     }
+  }
+
+  /**
+   * @dev Transfers, mints, or burns voting units. To register a mint, `from` should be zero. To register a burn, `to`
+   * should be zero. Total supply of voting units will be adjusted with mints and burns.
+   */
+  function _transferVotingUnits(address from, address to, uint256 amount) internal virtual {
+    // skip from==to no-op, as the math would require special handling
+    if (from == to) {
+      return;
+    }
+
+    // update total supply checkpoints if mint/burn
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
+    if (from == address(0)) {
+      _push($._totalCheckpoints, _add, SafeCast.toUint208(amount));
+    }
+    if (to == address(0)) {
+      _push($._totalCheckpoints, _subtract, SafeCast.toUint208(amount));
+    }
+
+    // finally, calculate delegatee vote changes and create checkpoints accordingly
+    DelegationAdjustment[] memory _delegationAdjustmentsFrom = new DelegationAdjustment[]($._delegatees[from].length);
+    // We'll need to adjust the delegatee votes for both "from" and "to" delegatee sets.
+    if ($._delegatees[from].length > 0) {
+      uint256 _fromVotes = _getVotingUnits(from);
+      DelegationAdjustment[] memory _from = _calculateWeightDistribution($._delegatees[from], _fromVotes + amount);
+      DelegationAdjustment[] memory _fromNew = _calculateWeightDistribution($._delegatees[from], _fromVotes);
+
+      for (uint256 i = 0; i < _from.length; i++) {
+        _delegationAdjustmentsFrom[i] = DelegationAdjustment({
+          _delegatee: $._delegatees[from][i]._delegatee,
+          _amount: _from[i]._amount - _fromNew[i]._amount
+        });
+      }
+    }
+
+    DelegationAdjustment[] memory _delegationAdjustmentsTo = new DelegationAdjustment[]($._delegatees[to].length);
+    if ($._delegatees[to].length > 0) {
+      uint256 _toVotes = _getVotingUnits(to);
+      DelegationAdjustment[] memory _to = _calculateWeightDistribution($._delegatees[to], _toVotes - amount);
+      DelegationAdjustment[] memory _toNew = _calculateWeightDistribution($._delegatees[to], _toVotes);
+
+      for (uint256 i = 0; i < _to.length; i++) {
+        _delegationAdjustmentsTo[i] = (
+          DelegationAdjustment({
+            _delegatee: $._delegatees[to][i]._delegatee,
+            _amount: _toNew[i]._amount - _to[i]._amount
+          })
+        );
+      }
+    }
+    _aggregateDelegationAdjustmentsAndCreateCheckpoints(_delegationAdjustmentsFrom, _delegationAdjustmentsTo);
   }
 
   /**
@@ -450,70 +504,6 @@ abstract contract VotesPartialDelegationUpgradeable is
         emit DelegateVotesChanged(_delegationAdjustment._delegatee, oldValue, newValue);
       }
     }
-  }
-
-  /**
-   * @dev Transfers, mints, or burns voting units. To register a mint, `from` should be zero. To register a burn, `to`
-   * should be zero. Total supply of voting units will be adjusted with mints and burns.
-   */
-  function _transferVotingUnits(address from, address to, uint256 amount) internal virtual {
-    // skip from==to case, as the math would require special handling for a no-op
-    if (from == to) {
-      return;
-    }
-
-    // update total supply checkpoints if mint/burn
-    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    if (from == address(0)) {
-      _push($._totalCheckpoints, _add, SafeCast.toUint208(amount));
-    }
-    if (to == address(0)) {
-      _push($._totalCheckpoints, _subtract, SafeCast.toUint208(amount));
-    }
-
-    // finally, calculate delegatee vote changes and create checkpoints accordingly
-    _calculateDelegateVoteAdjustmentsAndCreateCheckpoints(from, to, amount);
-  }
-
-  /**
-   * @dev Calculate the vote weight adjustments for `from` and `to` delegatees and create checkpoints accordingly.
-   */
-  function _calculateDelegateVoteAdjustmentsAndCreateCheckpoints(address from, address to, uint256 amount)
-    internal
-    virtual
-  {
-    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    DelegationAdjustment[] memory _delegationAdjustmentsFrom = new DelegationAdjustment[]($._delegatees[from].length);
-    // We'll need to adjust the delegatee votes for both "from" and "to" delegatee sets.
-    if ($._delegatees[from].length > 0) {
-      DelegationAdjustment[] memory _from = _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from));
-      DelegationAdjustment[] memory _fromNew =
-        _calculateWeightDistribution($._delegatees[from], _getVotingUnits(from) - amount);
-
-      for (uint256 i = 0; i < _from.length; i++) {
-        _delegationAdjustmentsFrom[i] = DelegationAdjustment({
-          _delegatee: $._delegatees[from][i]._delegatee,
-          _amount: _from[i]._amount - _fromNew[i]._amount
-        });
-      }
-    }
-
-    DelegationAdjustment[] memory _delegationAdjustmentsTo = new DelegationAdjustment[]($._delegatees[to].length);
-    if ($._delegatees[to].length > 0) {
-      DelegationAdjustment[] memory _to = _calculateWeightDistribution($._delegatees[to], _getVotingUnits(to));
-      DelegationAdjustment[] memory _toNew =
-        _calculateWeightDistribution($._delegatees[to], amount + _getVotingUnits(to));
-
-      for (uint256 i = 0; i < _to.length; i++) {
-        _delegationAdjustmentsTo[i] = (
-          DelegationAdjustment({
-            _delegatee: $._delegatees[to][i]._delegatee,
-            _amount: _toNew[i]._amount - _to[i]._amount
-          })
-        );
-      }
-    }
-    _aggregateDelegationAdjustmentsAndCreateCheckpoints(_delegationAdjustmentsFrom, _delegationAdjustmentsTo);
   }
 
   /**
