@@ -2,12 +2,12 @@
 pragma solidity ^0.8.20;
 
 import {console} from "forge-std/Test.sol";
-import {L2GovToken} from "src/L2GovToken.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
-import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {DelegationAndEventHelpers} from "./helpers/DelegationAndEventHelpers.sol";
+import {L2GovToken} from "src/L2GovToken.sol";
+import {PartialDelegation} from "src/IVotesPartialDelegation.sol";
+import {DelegationAndEventHelpers} from "test/helpers/DelegationAndEventHelpers.sol";
 
 contract L2GovTestPreInit is DelegationAndEventHelpers {
   L2GovToken public tokenImpl;

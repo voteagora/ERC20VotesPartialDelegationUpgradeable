@@ -2,9 +2,9 @@
 pragma solidity ^0.8.20;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {FakeERC20VotesPartialDelegationUpgradeable} from "./fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
-import {Handler} from "./Handler.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {FakeERC20VotesPartialDelegationUpgradeable} from "test/fakes/FakeERC20VotesPartialDelegationUpgradeable.sol";
+import {Handler} from "test/Handler.sol";
 
 contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
   Handler public handler;

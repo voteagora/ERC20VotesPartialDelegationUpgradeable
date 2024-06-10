@@ -3,8 +3,8 @@ pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
 import {Vm} from "forge-std/Vm.sol";
-import {L2GovToken} from "src/L2GovToken.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {L2GovToken} from "src/L2GovToken.sol";
 
 contract DeployL2GovToken is Script {
   address deployer;
