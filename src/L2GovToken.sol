@@ -18,8 +18,10 @@ contract L2GovToken is AccessControlUpgradeable, ERC20VotesPartialDelegationUpgr
   }
 
   /**
-   * @notice Initializes the contract with the provided admin. Should be called during deployment.
+   * @notice Initializes the contract with the provided admin and token name/symbol. Should be called during deployment.
    * @param _admin The admin address.
+   * @param _name The name of the token.
+   * @param _symbol The symbol of the token.
    * @dev Reverts if the provided admin address is zero.
    */
   function initialize(address _admin, string calldata _name, string calldata _symbol) public initializer {
