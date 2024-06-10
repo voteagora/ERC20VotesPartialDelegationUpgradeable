@@ -335,7 +335,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
     for (uint256 i = 0; i < _newDelegations.length; i++) {
       // check sorting and uniqueness
-      if (i != 0 && _newDelegations[i]._delegatee == address(0)) {
+      if (i == 0 && _newDelegations[i]._delegatee == address(0)) {
         // zero delegation is allowed if in 0th position
       } else if (_newDelegations[i]._delegatee <= _lastDelegatee) {
         revert DuplicateOrUnsortedDelegatees(_newDelegations[i]._delegatee);

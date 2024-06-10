@@ -18,7 +18,7 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
     handler = new Handler(tokenImpl, tokenProxy);
     vm.label(address(handler), "Handler contract");
 
-    bytes4[] memory selectors = new bytes4[](7);
+    bytes4[] memory selectors = new bytes4[](9);
     selectors[0] = Handler.handler_mint.selector;
     selectors[1] = Handler.handler_mintAndDelegateSingle.selector;
     selectors[2] = Handler.handler_mintAndDelegateMulti.selector;
@@ -26,6 +26,8 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
     selectors[4] = Handler.handler_undelegate.selector;
     selectors[5] = Handler.handler_validNonZeroTransferToNonDelegator.selector;
     selectors[6] = Handler.handler_validNonZeroTransferToDelegator.selector;
+    selectors[7] = Handler.handler_invalidTransfer.selector;
+    selectors[8] = Handler.handler_invalidDelegation.selector;
     targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
 
     targetContract(address(handler));
@@ -46,6 +48,17 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
       _sumOfVotes + _sumOfRemainders + _sumOfNonDelegateBalances,
       tokenProxy.totalSupply(),
       "sum of votes plus undelegated remainders plus sum of non-delegate balances does not equal total supply"
+    );
+  }
+
+  function invariant_SumOfVotesPlusRemainderVotesEqualsSumOfDelegatorBalances() public {
+    uint256 _sumOfVotes = handler.reduceDelegatees(0, this.accumulateVotes);
+    uint256 _sumOfRemainders = handler.reduceDelegators(0, this.accumulateRemainders);
+    uint256 _sumOfDelegatorBalances = handler.reduceDelegators(0, this.accumulateBalances);
+    assertEq(
+      _sumOfVotes + _sumOfRemainders,
+      _sumOfDelegatorBalances,
+      "sum of votes plus undelegated remainders does not equal sum of delegator balances"
     );
   }
 
