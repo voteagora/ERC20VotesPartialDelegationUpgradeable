@@ -24,6 +24,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
 
   // ghost vars
   mapping(address => uint208) public ghost_delegatorVoteRemainder;
+  mapping(address => uint208) public ghost_delegatorZeroAddressVotes;
 
   modifier countCall(bytes32 key) {
     calls[key]++;
@@ -67,11 +68,17 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     tokenProxy.mint(_amount);
   }
 
-  function _adjustDelegatorRemainder(address _delegator) public {
-    (, uint208 _remainder) = _calculateWeightDistributionAndRemainder(
+  function _adjustDelegatorRemainderAndZeroAddressVotes(address _delegator) public {
+    (DelegationAdjustment[] memory _delegationAdjustments, uint208 _remainder) =
+    _calculateWeightDistributionAndRemainder(
       tokenProxy.delegates(_delegator), uint208(tokenProxy.balanceOf(_delegator))
     );
     ghost_delegatorVoteRemainder[_delegator] = _remainder;
+    if (_delegationAdjustments[0]._delegatee == address(0)) {
+      ghost_delegatorZeroAddressVotes[_delegator] = _delegationAdjustments[0]._amount;
+    } else {
+      ghost_delegatorZeroAddressVotes[_delegator] = 0;
+    }
   }
 
   function _createValidPartialDelegation(uint256 _n, uint256 _seed) internal returns (PartialDelegation[] memory) {
@@ -123,7 +130,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
       // holder is also a nondelegator, because there's no delegation
       _nondelegators.add(_holder);
     } else {
-      _adjustDelegatorRemainder(_holder);
+      _adjustDelegatorRemainderAndZeroAddressVotes(_holder);
     }
   }
 
@@ -141,7 +148,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     _holders.add(_holder);
     _delegators.add(_holder);
     _delegatees.add(_delegatee);
-    _adjustDelegatorRemainder(_holder);
+    _adjustDelegatorRemainderAndZeroAddressVotes(_holder);
   }
 
   function handler_mintAndDelegateMulti(address _holder, uint256 _amount, uint256 _delegationSeed)
@@ -157,7 +164,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     tokenProxy.delegate(_delegations);
     _holders.add(_holder);
     _delegators.add(_holder);
-    _adjustDelegatorRemainder(_holder);
+    _adjustDelegatorRemainderAndZeroAddressVotes(_holder);
   }
 
   function handler_redelegate(uint256 _actorSeed, uint256 _delegationSeed) public countCall("handler_redelegate") {
@@ -165,18 +172,17 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     PartialDelegation[] memory _delegations = _createValidPartialDelegation(0, _delegationSeed);
     vm.prank(_delegator);
     tokenProxy.delegate(_delegations);
-    _adjustDelegatorRemainder(_delegator);
+    _adjustDelegatorRemainderAndZeroAddressVotes(_delegator);
   }
 
   function handler_undelegate(uint256 _actorSeed) public countCall("handler_undelegate") {
     address _holder = _useActor(_delegators, _actorSeed);
     vm.prank(_holder);
     tokenProxy.delegate(address(0));
-
     // technically address(0) is a delegatee now
     _delegatees.add(address(0));
     // _currentActor is also still technically a delegator delegating to address(0), so we won't add to nondelegates set
-    _adjustDelegatorRemainder(_holder);
+    _adjustDelegatorRemainderAndZeroAddressVotes(_holder);
   }
 
   function handler_validNonZeroTransferToDelegator(uint256 _amount, uint256 _actorSeed, uint256 _delegatorSeed)
@@ -188,8 +194,8 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     address _to = _useActor(_delegators, _delegatorSeed);
     vm.prank(_currentActor);
     tokenProxy.transfer(_to, _amount);
-    _adjustDelegatorRemainder(_currentActor);
-    _adjustDelegatorRemainder(_to);
+    _adjustDelegatorRemainderAndZeroAddressVotes(_currentActor);
+    _adjustDelegatorRemainderAndZeroAddressVotes(_to);
   }
 
   function handler_validNonZeroTransferToNonDelegator(uint256 _amount, uint256 _actorSeed, address _to)
@@ -207,7 +213,7 @@ contract Handler is CommonBase, StdCheats, StdUtils {
     _holders.add(_to);
     // we also know they're a nondelegator
     _nondelegators.add(_to);
-    _adjustDelegatorRemainder(_currentActor);
+    _adjustDelegatorRemainderAndZeroAddressVotes(_currentActor);
   }
 
   function handler_invalidTransfer(uint256 _amount, address _actor, address _to) public countCall("invalidTransfer") {

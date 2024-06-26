@@ -494,7 +494,7 @@ abstract contract VotesPartialDelegationUpgradeable is
         j++;
       }
 
-      if (_delegationAdjustment._amount != 0) {
+      if (_delegationAdjustment._amount != 0 && _delegationAdjustment._delegatee != address(0)) {
         (uint256 oldValue, uint256 newValue) = _push(
           $._delegateCheckpoints[_delegationAdjustment._delegatee],
           _operation(_op),

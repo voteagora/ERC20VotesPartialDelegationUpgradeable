@@ -40,23 +40,26 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
     assertEq(_sumOfBalances, tokenProxy.totalSupply(), "sum of balances does not equal total supply");
   }
 
-  function invariant_SumOfVotesPlusRemainderVotesPlusSumOfNonDelegateBalancesEqualsTotalSupply() public {
+  function invariant_SumOfVotesPlusRemainderVotesPlusSumOfNonDelegateBalancesPlusSumOfZeroAddressVotesEqualsTotalSupply(
+  ) public {
     uint256 _sumOfVotes = handler.reduceDelegatees(0, this.accumulateVotes);
     uint256 _sumOfRemainders = handler.reduceDelegators(0, this.accumulateRemainders);
     uint256 _sumOfNonDelegateBalances = handler.reduceNonDelegators(0, this.accumulateBalances);
+    uint256 _sumOfZeroAddressVotes = handler.reduceDelegators(0, this.accumulateZeroAddressVotes);
     assertEq(
-      _sumOfVotes + _sumOfRemainders + _sumOfNonDelegateBalances,
+      _sumOfVotes + _sumOfRemainders + _sumOfNonDelegateBalances + _sumOfZeroAddressVotes,
       tokenProxy.totalSupply(),
       "sum of votes plus undelegated remainders plus sum of non-delegate balances does not equal total supply"
     );
   }
 
-  function invariant_SumOfVotesPlusRemainderVotesEqualsSumOfDelegatorBalances() public {
+  function invariant_SumOfVotesPlusRemainderVotesPlusZeroAddressVotesEqualsSumOfDelegatorBalances() public {
     uint256 _sumOfVotes = handler.reduceDelegatees(0, this.accumulateVotes);
     uint256 _sumOfRemainders = handler.reduceDelegators(0, this.accumulateRemainders);
     uint256 _sumOfDelegatorBalances = handler.reduceDelegators(0, this.accumulateBalances);
+    uint256 _sumOfZeroAddressVotes = handler.reduceDelegators(0, this.accumulateZeroAddressVotes);
     assertEq(
-      _sumOfVotes + _sumOfRemainders,
+      _sumOfVotes + _sumOfRemainders + _sumOfZeroAddressVotes,
       _sumOfDelegatorBalances,
       "sum of votes plus undelegated remainders does not equal sum of delegator balances"
     );
@@ -66,7 +69,8 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
     uint256 blockNum = vm.getBlockNumber();
     vm.roll(blockNum + 1);
     uint256 _sumOfVotes = handler.reduceDelegatees(0, this.accumulateVotes)
-      + handler.reduceDelegators(0, this.accumulateRemainders) + handler.reduceNonDelegators(0, this.accumulateBalances);
+      + handler.reduceDelegators(0, this.accumulateRemainders) + handler.reduceNonDelegators(0, this.accumulateBalances)
+      + handler.reduceDelegators(0, this.accumulateZeroAddressVotes);
     assertEq(_sumOfVotes, tokenProxy.getPastTotalSupply(blockNum), "sum of votes does not equal past total supply");
   }
 
@@ -85,5 +89,9 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
 
   function accumulateRemainders(uint256 acc, address delegator) public view returns (uint256) {
     return acc + handler.ghost_delegatorVoteRemainder(delegator);
+  }
+
+  function accumulateZeroAddressVotes(uint256 acc, address delegator) public view returns (uint256) {
+    return acc + handler.ghost_delegatorZeroAddressVotes(delegator);
   }
 }
