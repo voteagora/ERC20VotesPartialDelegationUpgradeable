@@ -273,8 +273,9 @@ abstract contract VotesPartialDelegationUpgradeable is
     if (block.timestamp > _expiry) {
       revert VotesExpiredSignature(_expiry);
     }
-    bytes32[] memory _partialDelegationsPayload = new bytes32[](_partialDelegations.length);
-    for (uint256 i = 0; i < _partialDelegations.length; i++) {
+    uint256 _partialDelegationsLength = _partialDelegations.length;
+    bytes32[] memory _partialDelegationsPayload = new bytes32[](_partialDelegationsLength);
+    for (uint256 i; i < _partialDelegationsLength; i++) {
       _partialDelegationsPayload[i] = _hash(_partialDelegations[i]);
     }
 
@@ -306,8 +307,9 @@ abstract contract VotesPartialDelegationUpgradeable is
    * Emits events {IVotes-DelegateChanged} and {IVotes-DelegateVotesChanged}.
    */
   function _delegate(address _delegator, PartialDelegation[] memory _newDelegations) internal virtual {
-    if (_newDelegations.length > MAX_PARTIAL_DELEGATIONS) {
-      revert PartialDelegationLimitExceeded(_newDelegations.length, MAX_PARTIAL_DELEGATIONS);
+    uint256 _newDelegationsLength = _newDelegations.length;
+    if (_newDelegationsLength > MAX_PARTIAL_DELEGATIONS) {
+      revert PartialDelegationLimitExceeded(_newDelegationsLength, MAX_PARTIAL_DELEGATIONS);
     }
 
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
@@ -331,9 +333,8 @@ abstract contract VotesPartialDelegationUpgradeable is
     // The rest of this method body replaces in storage the old delegatees with the new ones.
     // keep track of last delegatee to ensure ordering / uniqueness:
     address _lastDelegatee;
-    PartialDelegation[] memory _oldDelegates = $._delegatees[_delegator];
 
-    for (uint256 i = 0; i < _newDelegations.length; i++) {
+    for (uint256 i; i < _newDelegationsLength; i++) {
       // check sorting and uniqueness
       if (i == 0 && _newDelegations[i]._delegatee == address(0)) {
         // zero delegation is allowed if in 0th position
@@ -352,13 +353,13 @@ abstract contract VotesPartialDelegationUpgradeable is
       _lastDelegatee = _newDelegations[i]._delegatee;
     }
     // remove any remaining old delegatees
-    if (_oldDelegateLength > _newDelegations.length) {
-      for (uint256 i = _newDelegations.length; i < _oldDelegateLength; i++) {
+    if (_oldDelegateLength > _newDelegationsLength) {
+      for (uint256 i = _newDelegationsLength; i < _oldDelegateLength; i++) {
         $._delegatees[_delegator].pop();
       }
     }
     // emit events
-    _emitDelegationEvents(_delegator, _oldDelegates, _newDelegations);
+    _emitDelegationEvents(_delegator, _oldDelegations, _newDelegations);
   }
 
   /// @dev Emits {DelegateChanged} events for each change in delegation, taking care to avoid duplicates and no-ops.
@@ -405,14 +406,14 @@ abstract contract VotesPartialDelegationUpgradeable is
     }
 
     // finally, calculate delegatee vote changes and create checkpoints accordingly
-    DelegationAdjustment[] memory _delegationAdjustmentsFrom = new DelegationAdjustment[]($._delegatees[from].length);
+    uint256 _fromLength = $._delegatees[from].length;
+    DelegationAdjustment[] memory _delegationAdjustmentsFrom = new DelegationAdjustment[](_fromLength);
     // We'll need to adjust the delegatee votes for both "from" and "to" delegatee sets.
-    if ($._delegatees[from].length > 0) {
+    if (_fromLength > 0) {
       uint256 _fromVotes = _getVotingUnits(from);
       DelegationAdjustment[] memory _from = _calculateWeightDistribution($._delegatees[from], _fromVotes + amount);
       DelegationAdjustment[] memory _fromNew = _calculateWeightDistribution($._delegatees[from], _fromVotes);
-
-      for (uint256 i = 0; i < _from.length; i++) {
+      for (uint256 i; i < _fromLength; i++) {
         _delegationAdjustmentsFrom[i] = DelegationAdjustment({
           _delegatee: $._delegatees[from][i]._delegatee,
           _amount: _from[i]._amount - _fromNew[i]._amount
@@ -420,13 +421,14 @@ abstract contract VotesPartialDelegationUpgradeable is
       }
     }
 
-    DelegationAdjustment[] memory _delegationAdjustmentsTo = new DelegationAdjustment[]($._delegatees[to].length);
-    if ($._delegatees[to].length > 0) {
+    uint256 _toLength = $._delegatees[to].length;
+    DelegationAdjustment[] memory _delegationAdjustmentsTo = new DelegationAdjustment[](_toLength);
+    if (_toLength > 0) {
       uint256 _toVotes = _getVotingUnits(to);
       DelegationAdjustment[] memory _to = _calculateWeightDistribution($._delegatees[to], _toVotes - amount);
       DelegationAdjustment[] memory _toNew = _calculateWeightDistribution($._delegatees[to], _toVotes);
 
-      for (uint256 i = 0; i < _to.length; i++) {
+      for (uint256 i; i < _toLength; i++) {
         _delegationAdjustmentsTo[i] = (
           DelegationAdjustment({
             _delegatee: $._delegatees[to][i]._delegatee,
@@ -452,14 +454,16 @@ abstract contract VotesPartialDelegationUpgradeable is
     // If they are the same delegatee, combine them, check if result is 0, and iterate i and j.
     // If _old[i] > _new[j], add _new[j] to the final array and iterate j. If _new[j] > _old[i], add _old[i] and iterate
     // i.
-    uint256 i = 0;
-    uint256 j = 0;
-    while (i < _old.length || j < _new.length) {
+    uint256 i;
+    uint256 j;
+    uint256 _oldLength = _old.length;
+    uint256 _newLength = _new.length;
+    while (i < _oldLength || j < _newLength) {
       DelegationAdjustment memory _delegationAdjustment;
       Op _op;
 
       // same address is present in both arrays
-      if (i < _old.length && j < _new.length && _old[i]._delegatee == _new[j]._delegatee) {
+      if (i < _oldLength && j < _newLength && _old[i]._delegatee == _new[j]._delegatee) {
         // combine, checkpoint, and iterate
         _delegationAdjustment._delegatee = _old[i]._delegatee;
         if (_old[i]._amount != _new[j]._amount) {
@@ -474,8 +478,8 @@ abstract contract VotesPartialDelegationUpgradeable is
         i++;
         j++;
       } else if (
-        j == _new.length // if we've exhausted the new array, we can just checkpoint the old values
-          || (i != _old.length && _old[i]._delegatee < _new[j]._delegatee) // or, if the ith old delegatee is next in line
+        j == _newLength // if we've exhausted the new array, we can just checkpoint the old values
+          || (i != _oldLength && _old[i]._delegatee < _new[j]._delegatee) // or, if the ith old delegatee is next in line
       ) {
         // skip if 0...
         _delegationAdjustment._delegatee = _old[i]._delegatee;
@@ -515,13 +519,14 @@ abstract contract VotesPartialDelegationUpgradeable is
     pure
     returns (DelegationAdjustment[] memory)
   {
-    DelegationAdjustment[] memory _delegationAdjustments = new DelegationAdjustment[](_delegations.length);
+    uint256 _delegationsLength = _delegations.length;
+    DelegationAdjustment[] memory _delegationAdjustments = new DelegationAdjustment[](_delegationsLength);
 
     // Keep track of total numerator to ensure it doesn't exceed DENOMINATOR
-    uint256 _totalNumerator = 0;
+    uint256 _totalNumerator;
 
     // Iterate through partial delegations to calculate vote weight
-    for (uint256 i = 0; i < _delegations.length; i++) {
+    for (uint256 i; i < _delegationsLength; i++) {
       if (_delegations[i]._numerator == 0) {
         revert InvalidNumeratorZero();
       }
