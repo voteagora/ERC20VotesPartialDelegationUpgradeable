@@ -302,7 +302,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
-   * @dev Delegate all of `_delegator`'s voting units to delegates specified in `_newDelegations`.
+   * @dev Delegate `_delegator`'s voting units to delegates specified in `_newDelegations`.
    * Emits events {IVotes-DelegateChanged} and {IVotes-DelegateVotesChanged}.
    */
   function _delegate(address _delegator, PartialDelegation[] memory _newDelegations) internal virtual {
@@ -312,7 +312,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
 
-    // Subtract votes from old delegatee set, if it exists.
+    // Calculate adjustments for old delegatee set, if it exists.
     PartialDelegation[] memory _oldDelegations = delegates(_delegator);
     uint256 _oldDelegateLength = _oldDelegations.length;
     DelegationAdjustment[] memory _old = new DelegationAdjustment[](_oldDelegateLength);
