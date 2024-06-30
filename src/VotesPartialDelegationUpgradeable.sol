@@ -30,6 +30,7 @@ import {IVotesPartialDelegation} from "src/IVotesPartialDelegation.sol";
  * When using this module the derived contract must implement {_getVotingUnits} (for example, make it return
  * {ERC721-balanceOf}), and can use {_transferVotingUnits} to track a change in the distribution of those units (in the
  * previous example, it would be included in {ERC721-_update}).
+ * @custom:security-contact security@voteagora.com
  */
 abstract contract VotesPartialDelegationUpgradeable is
   Initializable,
