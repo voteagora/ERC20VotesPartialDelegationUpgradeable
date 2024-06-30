@@ -25,7 +25,7 @@ interface IVotesPartialDelegation is IERC6372 {
   /**
    * @dev Emitted when an account changes their delegate.
    */
-  event DelegateChanged(address indexed delegator, address indexed delegatee, uint96 numerator);
+  event DelegateChanged(address indexed delegator, address[] oldDelegatees, address[] newDelegatees);
 
   /**
    * @dev Emitted when a token transfer or delegate change results in changes to a delegate's number of voting units.

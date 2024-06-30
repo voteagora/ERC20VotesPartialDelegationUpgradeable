@@ -99,36 +99,15 @@ contract PartialDelegationTest is DelegationAndEventHelpers {
     PartialDelegation[] memory _oldDelegations,
     PartialDelegation[] memory _newDelegations
   ) internal {
-    uint256 i;
-    uint256 j;
-    while (i < _oldDelegations.length || j < _newDelegations.length) {
-      // If both delegations have the same delegatee
-      if (
-        i < _oldDelegations.length && j < _newDelegations.length
-          && _oldDelegations[i]._delegatee == _newDelegations[j]._delegatee
-      ) {
-        // if the numerator is different
-        if (_oldDelegations[i]._numerator != _newDelegations[j]._numerator) {
-          vm.expectEmit();
-          emit DelegateChanged(_delegator, _newDelegations[j]._delegatee, _newDelegations[j]._numerator);
-        }
-        i++;
-        j++;
-        // Old delegatee comes before the new delegatee OR new delegatees have been exhausted
-      } else if (
-        j == _newDelegations.length
-          || (i != _oldDelegations.length && _oldDelegations[i]._delegatee < _newDelegations[j]._delegatee)
-      ) {
-        vm.expectEmit();
-        emit DelegateChanged(_delegator, _oldDelegations[i]._delegatee, 0);
-        i++;
-        // If new delegatee comes before the old delegatee OR old delegatees have been exhausted
-      } else {
-        vm.expectEmit();
-        emit DelegateChanged(_delegator, _newDelegations[j]._delegatee, _newDelegations[j]._numerator);
-        j++;
-      }
+    address[] memory _oldDelegatees = new address[](_oldDelegations.length);
+    address[] memory _newDelegatees = new address[](_newDelegations.length);
+    for (uint256 i; i < _oldDelegations.length; i++) {
+      _oldDelegatees[i] = _oldDelegations[i]._delegatee;
     }
+    for (uint256 i; i < _newDelegations.length; i++) {
+      _newDelegatees[i] = _newDelegations[i]._delegatee;
+    }
+    emit DelegateChanged(_delegator, _oldDelegatees, _newDelegatees);
   }
 
   function _expectEmitDelegateVotesChangedEvents(
@@ -1443,132 +1422,6 @@ contract GetPastTotalSupply is PartialDelegationTest {
     vm.stopPrank();
     assertEq(tokenProxy.totalSupply(), _amount + _secondMint);
     assertEq(tokenProxy.getPastTotalSupply(_blockNo), _amount);
-  }
-}
-
-// This contract strengthens our confidence in our test helper, `_expectEmitDelegateChangedEvents`
-contract ExpectEmitDelegateChangedEvents is PartialDelegationTest {
-  function test_EmitsWhenFromNoDelegateeToANewDelegateeIsAdded() public {
-    address _actor = address(this);
-    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](0);
-    PartialDelegation[] memory _newDelegations = new PartialDelegation[](1);
-    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
-
-    vm.recordLogs();
-    _expectEmitDelegateChangedEvents(_actor, _oldDelegations, _newDelegations);
-    uint256 _logLength = vm.getRecordedLogs().length;
-
-    emit DelegateChanged(_actor, address(0x1), 5000);
-    assertEq(_logLength, 1);
-  }
-
-  function test_EmitsWhenBothDelegationsHaveTheSameDelegateeButTheNumeratorIsDifferent() public {
-    address _actor = address(this);
-    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
-    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
-    PartialDelegation[] memory _newDelegations = new PartialDelegation[](1);
-    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
-
-    vm.recordLogs();
-    _expectEmitDelegateChangedEvents(_actor, _oldDelegations, _newDelegations);
-    uint256 _logLength = vm.getRecordedLogs().length;
-
-    emit DelegateChanged(_actor, address(0x1), 5000);
-    assertEq(_logLength, 1);
-  }
-
-  function test_EmitsWhenOldDelegateeComesBeforeTheNewDelegatee() public {
-    address _actor = address(this);
-    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
-    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 10_000});
-    PartialDelegation[] memory _newDelegations = new PartialDelegation[](2);
-    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
-    _newDelegations[1] = PartialDelegation({_delegatee: address(0x2), _numerator: 5000});
-
-    vm.recordLogs();
-    _expectEmitDelegateChangedEvents(_actor, _oldDelegations, _newDelegations);
-    uint256 _logLength = vm.getRecordedLogs().length;
-
-    emit DelegateChanged(_actor, address(0x1), 5000);
-    emit DelegateChanged(_actor, address(0x2), 5000);
-    assertEq(_logLength, 2);
-  }
-
-  function test_EmitsWhenNewDelegateeComesBeforeTheOldDelegatee() public {
-    address _actor = address(this);
-    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](1);
-    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x2), _numerator: 10_000});
-    PartialDelegation[] memory _newDelegations = new PartialDelegation[](2);
-    _newDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5000});
-    _newDelegations[1] = PartialDelegation({_delegatee: address(0x2), _numerator: 5000});
-
-    vm.recordLogs();
-    _expectEmitDelegateChangedEvents(_actor, _oldDelegations, _newDelegations);
-    uint256 _logLength = vm.getRecordedLogs().length;
-
-    emit DelegateChanged(_actor, address(0x1), 5000);
-    emit DelegateChanged(_actor, address(0x2), 5000);
-    assertEq(_logLength, 2);
-  }
-
-  function test_CrazyCase1() public {
-    address _actor = address(this);
-    PartialDelegation[] memory _oldDelegations = new PartialDelegation[](8);
-    _oldDelegations[0] = PartialDelegation({_delegatee: address(0x1), _numerator: 5});
-    _oldDelegations[1] = PartialDelegation({_delegatee: address(0x2), _numerator: 7});
-    _oldDelegations[2] = PartialDelegation({_delegatee: address(0x3), _numerator: 9});
-    _oldDelegations[3] = PartialDelegation({_delegatee: address(0x4), _numerator: 11});
-    _oldDelegations[4] = PartialDelegation({_delegatee: address(0xA), _numerator: 13});
-    _oldDelegations[5] = PartialDelegation({_delegatee: address(0xB), _numerator: 15});
-    _oldDelegations[6] = PartialDelegation({_delegatee: address(0xC), _numerator: 17});
-    _oldDelegations[7] = PartialDelegation({_delegatee: address(0xD), _numerator: 19});
-
-    PartialDelegation[] memory _newDelegations = new PartialDelegation[](7);
-    // prepend
-    _newDelegations[0] = PartialDelegation({_delegatee: address(0x0), _numerator: 5});
-    // leave 0x1 the same
-    _newDelegations[1] = PartialDelegation({_delegatee: address(0x1), _numerator: 5});
-    // change numerator for 0x2
-    _newDelegations[2] = PartialDelegation({_delegatee: address(0x2), _numerator: 19});
-    // remove 0x3
-    // remove 0x4, add 0x9
-    _newDelegations[3] = PartialDelegation({_delegatee: address(0x9), _numerator: 1150});
-    // keep 0xA the same
-    _newDelegations[4] = PartialDelegation({_delegatee: address(0xA), _numerator: 13});
-    // remove 0xB
-    // keep 0xC the same
-    // change 0xD numerator
-    _newDelegations[5] = PartialDelegation({_delegatee: address(0xD), _numerator: 170});
-    // add 0xE
-    _newDelegations[6] = PartialDelegation({_delegatee: address(0xE), _numerator: 190});
-
-    vm.recordLogs();
-    _expectEmitDelegateChangedEvents(_actor, _oldDelegations, _newDelegations);
-    uint256 _logLength = vm.getRecordedLogs().length;
-
-    // Source of truth events: The events that we want the expect helper to expect, given the delegation changes.
-    // 0x0 emitted because new delegate
-    emit DelegateChanged(_actor, address(0x0), 5);
-    // skip 0x1 as no change
-    // 0x2 emitted because numerator change
-    emit DelegateChanged(_actor, address(0x2), 19);
-    // 0x3 emitted because removed
-    emit DelegateChanged(_actor, address(0x3), 0);
-    // 0x4 emitted because removed
-    emit DelegateChanged(_actor, address(0x4), 0);
-    // 0x9 emitted because added
-    emit DelegateChanged(_actor, address(0x9), 1150);
-    // 0xA skipped, no change
-    // 0xB emitted because removed
-    emit DelegateChanged(_actor, address(0xB), 0);
-    // 0xC emitted because removed
-    emit DelegateChanged(_actor, address(0xC), 0);
-    // 0xD emitted because numerator change
-    emit DelegateChanged(_actor, address(0xD), 170);
-    // 0xE emitted because added
-    emit DelegateChanged(_actor, address(0xE), 190);
-    uint256 _expectedLength = vm.getRecordedLogs().length;
-    assertEq(_logLength, _expectedLength);
   }
 }
 

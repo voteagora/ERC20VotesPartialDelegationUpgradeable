@@ -332,6 +332,8 @@ abstract contract VotesPartialDelegationUpgradeable is
     // The rest of this method body replaces in storage the old delegatees with the new ones.
     // keep track of last delegatee to ensure ordering / uniqueness:
     address _lastDelegatee;
+    address[] memory _oldDelegates = new address[](_oldDelegateLength);
+    address[] memory _newDelegates = new address[](_newDelegations.length);
 
     for (uint256 i; i < _newDelegationsLength; i++) {
       // check sorting and uniqueness
@@ -341,8 +343,11 @@ abstract contract VotesPartialDelegationUpgradeable is
         revert DuplicateOrUnsortedDelegatees(_newDelegations[i]._delegatee);
       }
 
+      _newDelegates[i] = _newDelegations[i]._delegatee;
+
       // replace existing delegatees in storage
       if (i < _oldDelegateLength) {
+        _oldDelegates[i] = _oldDelegations[i]._delegatee;
         $._delegatees[_delegator][i] = _newDelegations[i];
       }
       // or add new delegatees
@@ -383,6 +388,7 @@ abstract contract VotesPartialDelegationUpgradeable is
         j++;
       }
     }
+    emit DelegateChanged(_delegator, _oldDelegates, _newDelegates);
   }
 
   /**

@@ -10,7 +10,7 @@ contract DelegationAndEventHelpers is Test {
   ERC20VotesPartialDelegationUpgradeable token;
 
   /// @dev Emitted when an account changes their delegate.
-  event DelegateChanged(address indexed delegator, address indexed delegatee, uint96 numerator);
+  event DelegateChanged(address indexed delegator, address[] indexed oldDelegatees, address[] indexed newDelegatees);
   /// @dev Emitted when a token transfer or delegate change results in changes to a delegate's number of voting units.
   event DelegateVotesChanged(address indexed delegate, uint256 previousVotes, uint256 newVotes);
 
