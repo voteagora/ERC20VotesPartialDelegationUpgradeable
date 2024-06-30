@@ -67,7 +67,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   /// @notice Denominator of a partial delegation fraction.
   uint96 public constant DENOMINATOR = 10_000;
   // keccak256(abi.encode(uint256(keccak256("storage.VotesPartialDelegation")) - 1)) &~bytes32(uint256(0xff))
-  bytes32 private constant VotesPartialDelegationStorageLocation =
+  bytes32 private constant VOTES_PARTIAL_DELEGATION_STORAGE_LOCATION =
     0x60b289dca0c170df62b40d5e0313a4c0e665948cd979375ddb3db607c1b89f00;
 
   /**
@@ -104,7 +104,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
   function _getVotesPartialDelegationStorage() private pure returns (VotesPartialDelegationStorage storage $) {
     assembly {
-      $.slot := VotesPartialDelegationStorageLocation
+      $.slot := VOTES_PARTIAL_DELEGATION_STORAGE_LOCATION
     }
   }
 
