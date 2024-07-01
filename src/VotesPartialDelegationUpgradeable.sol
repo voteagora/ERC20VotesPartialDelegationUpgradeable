@@ -40,6 +40,46 @@ abstract contract VotesPartialDelegationUpgradeable is
 {
   using Checkpoints for Checkpoints.Trace208;
 
+  /// @custom:storage-location erc7201:storage.VotesPartialDelegation
+  struct VotesPartialDelegationStorage {
+    mapping(address account => PartialDelegation[]) _delegatees;
+    mapping(address delegatee => Checkpoints.Trace208) _delegateCheckpoints;
+    Checkpoints.Trace208 _totalCheckpoints;
+  }
+
+  enum Op {
+    ADD,
+    SUBTRACT
+  }
+
+  /// @notice Typehash for legacy delegation.
+  /// @custom:legacy
+  bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
+  /// @notice Typehash for partial delegation.
+  bytes32 public constant PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH = keccak256(
+    "PartialDelegationOnBehalf(address delegator,PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
+  );
+  /// @notice Typehash for partial delegation.
+  bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
+    keccak256("PartialDelegation(address delegatee,uint96 numerator)");
+  /// @notice Max # of partial delegations that can be specified in a partial delegation set.
+  uint256 public constant MAX_PARTIAL_DELEGATIONS = 100;
+  /// @notice Denominator of a partial delegation fraction.
+  uint96 public constant DENOMINATOR = 10_000;
+  // keccak256(abi.encode(uint256(keccak256("storage.VotesPartialDelegation")) - 1)) &~bytes32(uint256(0xff))
+  bytes32 private constant VotesPartialDelegationStorageLocation =
+    0x60b289dca0c170df62b40d5e0313a4c0e665948cd979375ddb3db607c1b89f00;
+
+  /**
+   * @dev The clock was incorrectly modified.
+   */
+  error ERC6372InconsistentClock();
+
+  /**
+   * @dev Lookup to future votes is not available.
+   */
+  error ERC5805FutureLookup(uint256 timepoint, uint48 clock);
+
   /// @notice Invalid signature is provided.
   error InvalidSignature();
 
@@ -58,56 +98,15 @@ abstract contract VotesPartialDelegationUpgradeable is
   /// @notice The sum of the numerators exceeds the denominator.
   error NumeratorSumExceedsDenominator(uint256 numerator, uint96 denominator);
 
-  /// @notice Typehash for legacy delegation.
-  /// @custom:legacy
-  bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
-  /// @notice Typehash for partial delegation.
-  bytes32 public constant PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH = keccak256(
-    "PartialDelegationOnBehalf(address delegator,PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
-  );
-  /// @notice Typehash for partial delegation.
-  bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
-    keccak256("PartialDelegation(address delegatee,uint96 numerator)");
-  /// @notice Max # of partial delegations that can be specified in a partial delegation set.
-  uint256 public constant MAX_PARTIAL_DELEGATIONS = 100;
-  /// @notice Denominator of a partial delegation fraction.
-  uint96 public constant DENOMINATOR = 10_000;
+  function __VotesPartialDelegation_init() internal onlyInitializing {}
 
-  enum Op {
-    ADD,
-    SUBTRACT
-  }
-
-  /// @custom:storage-location erc7201:storage.VotesPartialDelegation
-  struct VotesPartialDelegationStorage {
-    mapping(address account => PartialDelegation[]) _delegatees;
-    mapping(address delegatee => Checkpoints.Trace208) _delegateCheckpoints;
-    Checkpoints.Trace208 _totalCheckpoints;
-  }
-
-  // keccak256(abi.encode(uint256(keccak256("storage.VotesPartialDelegation")) - 1)) &~bytes32(uint256(0xff))
-  bytes32 private constant VotesPartialDelegationStorageLocation =
-    0x60b289dca0c170df62b40d5e0313a4c0e665948cd979375ddb3db607c1b89f00;
+  function __VotesPartialDelegation_init_unchained() internal onlyInitializing {}
 
   function _getVotesPartialDelegationStorage() private pure returns (VotesPartialDelegationStorage storage $) {
     assembly {
       $.slot := VotesPartialDelegationStorageLocation
     }
   }
-
-  /**
-   * @dev The clock was incorrectly modified.
-   */
-  error ERC6372InconsistentClock();
-
-  /**
-   * @dev Lookup to future votes is not available.
-   */
-  error ERC5805FutureLookup(uint256 timepoint, uint48 clock);
-
-  function __VotesPartialDelegation_init() internal onlyInitializing {}
-
-  function __VotesPartialDelegation_init_unchained() internal onlyInitializing {}
 
   /**
    * @dev Clock used for flagging checkpoints. Can be overridden to implement timestamp based
