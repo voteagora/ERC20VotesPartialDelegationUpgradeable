@@ -15,6 +15,7 @@ struct DelegationAdjustment {
 
 /**
  * @dev Common interface for {ERC20VotesPartialDelegation} and other {VotesPartialDelegation}-enabled contracts.
+ * @custom:security-contact security@voteagora.com
  */
 interface IVotesPartialDelegation is IERC6372 {
   /**
