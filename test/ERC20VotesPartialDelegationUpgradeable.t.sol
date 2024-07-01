@@ -94,22 +94,6 @@ contract PartialDelegationTest is DelegationAndEventHelpers {
     return delegations;
   }
 
-  function _expectEmitDelegateChangedEvents(
-    address _delegator,
-    PartialDelegation[] memory _oldDelegations,
-    PartialDelegation[] memory _newDelegations
-  ) internal {
-    address[] memory _oldDelegatees = new address[](_oldDelegations.length);
-    address[] memory _newDelegatees = new address[](_newDelegations.length);
-    for (uint256 i; i < _oldDelegations.length; i++) {
-      _oldDelegatees[i] = _oldDelegations[i]._delegatee;
-    }
-    for (uint256 i; i < _newDelegations.length; i++) {
-      _newDelegatees[i] = _newDelegations[i]._delegatee;
-    }
-    emit DelegateChanged(_delegator, _oldDelegatees, _newDelegatees);
-  }
-
   function _expectEmitDelegateVotesChangedEvents(
     uint256 _amount,
     uint256 _toExistingBalance,
@@ -291,7 +275,7 @@ contract Delegate is PartialDelegationTest {
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
 
-    _expectEmitDelegateChangedEvents(_actor, new PartialDelegation[](0), delegations);
+    emit DelegateChanged(_actor, new PartialDelegation[](0), delegations);
     tokenProxy.delegate(delegations);
     vm.stopPrank();
   }
@@ -330,7 +314,7 @@ contract Delegate is PartialDelegationTest {
       newDelegations[i] = oldDelegations[i];
     }
 
-    _expectEmitDelegateChangedEvents(_actor, oldDelegations, newDelegations);
+    emit DelegateChanged(_actor, oldDelegations, newDelegations);
     tokenProxy.delegate(newDelegations);
     vm.stopPrank();
   }
@@ -373,7 +357,7 @@ contract Delegate is PartialDelegationTest {
       _totalNumerator += _numerator;
     }
 
-    _expectEmitDelegateChangedEvents(_actor, oldDelegations, newDelegations);
+    emit DelegateChanged(_actor, oldDelegations, newDelegations);
     tokenProxy.delegate(newDelegations);
     vm.stopPrank();
   }
@@ -396,7 +380,7 @@ contract Delegate is PartialDelegationTest {
 
     PartialDelegation[] memory newDelegations =
       _createValidPartialDelegation(_newN, uint256(keccak256(abi.encode(_seed))));
-    _expectEmitDelegateChangedEvents(_actor, oldDelegations, newDelegations);
+    emit DelegateChanged(_actor, oldDelegations, newDelegations);
     tokenProxy.delegate(newDelegations);
     vm.stopPrank();
   }
@@ -1534,7 +1518,8 @@ contract ExpectEmitDelegateVotesChangedEvents is PartialDelegationTest {
   }
 }
 
-// This contract strengthens our confidence in our test helper, `_expectEmitDelegateChangedEvents` (the 4 param version)
+// This contract strengthens our confidence in our test helper, `_expectEmitDelegateVotesChangedEvents` (the 4 param
+// version)
 contract ExpectEmitDelegateVotesChangedEventsDuringTransfer is PartialDelegationTest {
   function test_EmitsWhenTransferringTokensFromAnAddressWithNoDelegationsToAnAddressWithNoDelegations() public {
     address from = address(0x10);

@@ -332,8 +332,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     // The rest of this method body replaces in storage the old delegatees with the new ones.
     // keep track of last delegatee to ensure ordering / uniqueness:
     address _lastDelegatee;
-    address[] memory _oldDelegates = new address[](_oldDelegateLength);
-    address[] memory _newDelegates = new address[](_newDelegations.length);
 
     for (uint256 i; i < _newDelegationsLength; i++) {
       // check sorting and uniqueness
@@ -343,11 +341,8 @@ abstract contract VotesPartialDelegationUpgradeable is
         revert DuplicateOrUnsortedDelegatees(_newDelegations[i]._delegatee);
       }
 
-      _newDelegates[i] = _newDelegations[i]._delegatee;
-
       // replace existing delegatees in storage
       if (i < _oldDelegateLength) {
-        _oldDelegates[i] = _oldDelegations[i]._delegatee;
         $._delegatees[_delegator][i] = _newDelegations[i];
       }
       // or add new delegatees
@@ -357,38 +352,12 @@ abstract contract VotesPartialDelegationUpgradeable is
       _lastDelegatee = _newDelegations[i]._delegatee;
     }
     // remove any remaining old delegatees
-    if (_oldDelegateLength > _newDelegationsLength) {
-      for (uint256 i = _newDelegationsLength; i < _oldDelegateLength; i++) {
+    if (_oldDelegateLength > _newDelegations.length) {
+      for (uint256 i = _newDelegations.length; i < _oldDelegateLength; i++) {
         $._delegatees[_delegator].pop();
       }
     }
-    // emit events
-    _emitDelegationEvents(_delegator, _oldDelegations, _newDelegations);
-  }
-
-  /// @dev Emits {DelegateChanged} events for each change in delegation, taking care to avoid duplicates and no-ops.
-  function _emitDelegationEvents(address _delegator, PartialDelegation[] memory _old, PartialDelegation[] memory _new)
-    internal
-    virtual
-  {
-    uint256 i;
-    uint256 j;
-    while (i < _old.length || j < _new.length) {
-      if (i < _old.length && j < _new.length && _old[i]._delegatee == _new[j]._delegatee) {
-        if (_old[i]._numerator != _new[j]._numerator) {
-          emit DelegateChanged(_delegator, _new[j]._delegatee, _new[j]._numerator);
-        }
-        i++;
-        j++;
-      } else if (j == _new.length || (i != _old.length && _old[i]._delegatee < _new[j]._delegatee)) {
-        emit DelegateChanged(_delegator, _old[i]._delegatee, 0);
-        i++;
-      } else {
-        emit DelegateChanged(_delegator, _new[j]._delegatee, _new[j]._numerator);
-        j++;
-      }
-    }
-    emit DelegateChanged(_delegator, _oldDelegates, _newDelegates);
+    emit DelegateChanged(_delegator, _oldDelegations, _newDelegations);
   }
 
   /**
