@@ -54,7 +54,6 @@ abstract contract ERC20VotesPartialDelegationUpgradeable is
    */
   function _update(address from, address to, uint256 value) internal virtual override {
     super._update(from, to, value);
-    _transferVotingUnits(from, to, value);
     if (from == address(0)) {
       uint256 supply = totalSupply();
       uint256 cap = _maxSupply();
@@ -62,6 +61,7 @@ abstract contract ERC20VotesPartialDelegationUpgradeable is
         revert ERC20ExceededSafeSupply(supply, cap);
       }
     }
+    _transferVotingUnits(from, to, value);
   }
 
   /**
