@@ -1139,6 +1139,41 @@ contract DelegatePartiallyOnBehalf is PartialDelegationTest {
   }
 }
 
+contract InvalidateNonce is PartialDelegationTest {
+  using stdStorage for StdStorage;
+
+  function testFuzz_SucessfullyIncrementsTheNonceOfTheSender(address _caller, uint256 _initialNonce) public {
+    vm.assume(_caller != address(0));
+    vm.assume(_initialNonce != type(uint256).max);
+
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_caller).checked_write(_initialNonce);
+
+    vm.prank(_caller);
+    tokenProxy.invalidateNonce();
+
+    uint256 currentNonce = tokenProxy.nonces(_caller);
+
+    assertEq(currentNonce, _initialNonce + 1, "Current nonce is incorrect");
+  }
+
+  function testFuzz_IncreasesTheNonceByTwoWhenCalledTwice(address _caller, uint256 _initialNonce) public {
+    vm.assume(_caller != address(0));
+    _initialNonce = bound(_initialNonce, 0, type(uint256).max - 2);
+
+    stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_caller).checked_write(_initialNonce);
+
+    vm.prank(_caller);
+    tokenProxy.invalidateNonce();
+
+    vm.prank(_caller);
+    tokenProxy.invalidateNonce();
+
+    uint256 currentNonce = tokenProxy.nonces(_caller);
+
+    assertEq(currentNonce, _initialNonce + 2, "Current nonce is incorrect");
+  }
+}
+
 contract Transfer is PartialDelegationTest {
   function testFuzz_MovesVotesFromOneDelegateeSetToAnother(
     address _from,
