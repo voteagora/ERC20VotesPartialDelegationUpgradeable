@@ -275,6 +275,7 @@ contract Delegate is PartialDelegationTest {
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
 
+    vm.expectEmit();
     emit DelegateChanged(_actor, new PartialDelegation[](0), delegations);
     tokenProxy.delegate(delegations);
     vm.stopPrank();
@@ -314,6 +315,7 @@ contract Delegate is PartialDelegationTest {
       newDelegations[i] = oldDelegations[i];
     }
 
+    vm.expectEmit();
     emit DelegateChanged(_actor, oldDelegations, newDelegations);
     tokenProxy.delegate(newDelegations);
     vm.stopPrank();
@@ -357,6 +359,7 @@ contract Delegate is PartialDelegationTest {
       _totalNumerator += _numerator;
     }
 
+    vm.expectEmit();
     emit DelegateChanged(_actor, oldDelegations, newDelegations);
     tokenProxy.delegate(newDelegations);
     vm.stopPrank();
@@ -380,6 +383,7 @@ contract Delegate is PartialDelegationTest {
 
     PartialDelegation[] memory newDelegations =
       _createValidPartialDelegation(_newN, uint256(keccak256(abi.encode(_seed))));
+    vm.expectEmit();
     emit DelegateChanged(_actor, oldDelegations, newDelegations);
     tokenProxy.delegate(newDelegations);
     vm.stopPrank();
