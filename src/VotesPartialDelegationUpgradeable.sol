@@ -302,6 +302,14 @@ abstract contract VotesPartialDelegationUpgradeable is
   }
 
   /**
+   * @dev Allows an address to increment their nonce and therefore invalidate any pending signed
+   * actions.
+   */
+  function invalidateNonce() external {
+    _useNonce(msg.sender);
+  }
+
+  /**
    * @dev Delegate `_delegator`'s voting units to delegates specified in `_newDelegations`.
    * Emits events {IVotes-DelegateChanged} and {IVotes-DelegateVotesChanged}.
    */
