@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {IERC5805Modified} from "src/IERC5805Modified.sol";
 import {ContextUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ContextUpgradeable.sol";
 import {NoncesUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/NoncesUpgradeable.sol";
 import {EIP712Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
@@ -10,8 +9,9 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Time} from "@openzeppelin/contracts/utils/types/Time.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {PartialDelegation, DelegationAdjustment} from "src/IVotesPartialDelegation.sol";
 import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/SignatureChecker.sol";
+import {PartialDelegation, DelegationAdjustment} from "src/IVotesPartialDelegation.sol";
+import {IVotesPartialDelegation} from "src/IVotesPartialDelegation.sol";
 
 /**
  * @dev This is a base abstract contract that tracks voting units, which are a measure of voting power that can be
@@ -36,7 +36,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   ContextUpgradeable,
   EIP712Upgradeable,
   NoncesUpgradeable,
-  IERC5805Modified
+  IVotesPartialDelegation
 {
   using Checkpoints for Checkpoints.Trace208;
 

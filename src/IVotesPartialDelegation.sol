@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {IERC6372} from "@openzeppelin/contracts/interfaces/IERC6372.sol";
+
 struct PartialDelegation {
   address _delegatee;
   uint96 _numerator;
@@ -14,7 +16,7 @@ struct DelegationAdjustment {
 /**
  * @dev Common interface for {ERC20VotesPartialDelegation} and other {VotesPartialDelegation}-enabled contracts.
  */
-interface IVotesPartialDelegation {
+interface IVotesPartialDelegation is IERC6372 {
   /**
    * @dev The signature used has expired.
    */
