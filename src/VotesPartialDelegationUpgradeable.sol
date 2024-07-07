@@ -361,8 +361,8 @@ abstract contract VotesPartialDelegationUpgradeable is
       _lastDelegatee = _newDelegations[i]._delegatee;
     }
     // remove any remaining old delegatees
-    if (_oldDelegateLength > _newDelegations.length) {
-      for (uint256 i = _newDelegations.length; i < _oldDelegateLength; i++) {
+    if (_oldDelegateLength > _newDelegationsLength) {
+      for (uint256 i = _newDelegationsLength; i < _oldDelegateLength; i++) {
         $._delegatees[_delegator].pop();
       }
     }
