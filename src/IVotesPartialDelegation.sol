@@ -80,11 +80,6 @@ interface IVotesPartialDelegation is IERC6372 {
     ) external view returns (uint256);
 
     /**
-     * @dev Return the number of active delegates
-     */
-    function getActiveDelgateesCount() external view returns (uint256);
-
-    /**
      * @dev Returns the delegate that `account` has chosen.
      * Removed: This function is incompatible with partial delegation, which allows for multiple delegates per account.
      */

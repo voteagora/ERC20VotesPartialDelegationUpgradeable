@@ -351,11 +351,6 @@ function getVoteableSupply() public view returns (uint256) {
     _useNonce(msg.sender);
   }
 
-  function getActiveDelgateesCount() public view returns (uint256) {
-    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    return $._activeDelegatees.length;
-}
-
   /**
    * @dev Delegate `_delegator`'s voting units to delegates specified in `_newDelegations`.
    * Emits events {IVotes-DelegateChanged} and {IVotes-DelegateVotesChanged}.
@@ -492,12 +487,12 @@ function _transferVotingUnits(address from, address to, uint256 amount) internal
 
     for (uint256 i = 0; i < _fromLength; i++) {
         fromVoteableChange += _delegationAdjustmentsFrom[i]._amount;
-        _updateActiveDelegatee(_delegationAdjustmentsFrom[i]._delegatee, _getVotes(_delegationAdjustmentsFrom[i]._delegatee) - _delegationAdjustmentsFrom[i]._amount);
+        _updateActiveDelegatee(_delegationAdjustmentsFrom[i]._delegatee, getVotes(_delegationAdjustmentsFrom[i]._delegatee) - _delegationAdjustmentsFrom[i]._amount);
     }
 
     for (uint256 i = 0; i < _toLength; i++) {
         toVoteableChange += _delegationAdjustmentsTo[i]._amount;
-        _updateActiveDelegatee(_delegationAdjustmentsTo[i]._delegatee, _getVotes(_delegationAdjustmentsTo[i]._delegatee) + _delegationAdjustmentsTo[i]._amount);
+        _updateActiveDelegatee(_delegationAdjustmentsTo[i]._delegatee, getVotes(_delegationAdjustmentsTo[i]._delegatee) + _delegationAdjustmentsTo[i]._amount);
     }
 
     // Update voteable supply checkpoint
