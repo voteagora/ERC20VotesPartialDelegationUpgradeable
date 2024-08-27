@@ -188,9 +188,7 @@ abstract contract VotesPartialDelegationUpgradeable is
  */
 function getVoteableSupply() public view returns (uint256) {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    uint256 voteableSupply = $._voteableSupplyCheckpoints.latest();
-    uint256 totalSupply = _getTotalSupply();
-    return voteableSupply > totalSupply ? totalSupply : voteableSupply;
+    return $._voteableSupplyCheckpoints.latest();
 }
 
 /**
@@ -660,12 +658,13 @@ function _transferVotingUnits(address from, address to, uint256 amount) internal
     }
 }
 
-function _updateActiveDelegatee(address delegatee, uint256 amount) internal {
+function _updateActiveDelegatee(address delegatee, uint256 newAmount) internal {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    if (amount > 0) {
-        $._activeDelegatees[delegatee] = true;
-    } else if ($._activeDelegatees[delegatee]) {
-        delete $._activeDelegatees[delegatee];
+    bool isCurrentlyActive = $._activeDelegatees[delegatee];
+    bool shouldBeActive = newAmount > 0;
+    
+    if (isCurrentlyActive != shouldBeActive) {
+        $._activeDelegatees[delegatee] = shouldBeActive;
     }
 }
 
