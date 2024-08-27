@@ -47,6 +47,8 @@ abstract contract VotesPartialDelegationUpgradeable is
     mapping(address delegatee => Checkpoints.Trace208) _delegateCheckpoints;
     Checkpoints.Trace208 _totalCheckpoints;
   }
+  // Keep track of the delegated delegates
+  address[] private _allDelegatees;
 
   enum Op {
     ADD,
@@ -173,6 +175,57 @@ abstract contract VotesPartialDelegationUpgradeable is
       revert ERC5805FutureLookup(timepoint, currentTimepoint);
     }
     return $._totalCheckpoints.upperLookupRecent(SafeCast.toUint48(timepoint));
+  }
+
+/**
+ * @dev Returns the current total number of tokens that have been delegated for voting.
+ *
+ * This value represents the "voteable supply," which is the sum of all tokens that have been delegated to representatives.
+ * Tokens that have not been delegated are not included in this count.
+ *
+ * NOTE: This value is the sum of all delegated votes at the current block.
+ */
+  function getVoteableSupply() public view returns (uint256) {
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
+    uint256 voteableSupply = 0;
+
+    // Iterate through all delegatees and sum up their votes
+    for (uint256 i = 0; i < _allDelegatees.length; i++) {
+        voteableSupply += $._delegateCheckpoints[_allDelegatees[i]].latest();
+    }
+
+    return voteableSupply;
+}
+
+/**
+ * @dev Returns the total number of tokens that were delegated for voting at a specific moment in the past.
+ * If the `clock()` is configured to use block numbers, this will return the value at the end of the corresponding block.
+ *
+ * This value represents the "voteable supply" at a given timepoint, which is the sum of all tokens that were delegated
+ * to representatives at that specific moment.
+ *
+ * NOTE: This value is the sum of all delegated votes at the specified timepoint.
+ *
+ * Requirements:
+ *
+ * - `timepoint` must be in the past. If operating using block numbers, the block must be already mined.
+ *
+ * @param timepoint The block number or timestamp to query the voteable supply at.
+ */
+  function getPastVoteableSupply(uint256 timepoint) public view virtual returns (uint256) {
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
+    uint48 currentTimepoint = clock();
+    if (timepoint >= currentTimepoint) {
+        revert ERC5805FutureLookup(timepoint, currentTimepoint);
+    }
+
+    uint256 voteableSupply = 0;
+
+    for (uint256 i = 0; i < _allDelegatees.length; i++) {
+        voteableSupply += $._delegateCheckpoints[_allDelegatees[i]].upperLookupRecent(SafeCast.toUint48(timepoint));
+    }
+
+    return voteableSupply;
   }
 
   /**
@@ -358,6 +411,11 @@ abstract contract VotesPartialDelegationUpgradeable is
       else {
         $._delegatees[_delegator].push(_newDelegations[i]);
       }
+
+        if (_newDelegations[i]._delegatee != address(0) && !_isDelegateePresent(_newDelegations[i]._delegatee)) {
+            _allDelegatees.push(_newDelegations[i]._delegatee);
+        }
+
       _lastDelegatee = _newDelegations[i]._delegatee;
     }
     // remove any remaining old delegatees
@@ -563,6 +621,15 @@ abstract contract VotesPartialDelegationUpgradeable is
     return
       keccak256(abi.encode(PARTIAL_DELEGATION_TYPEHASH, partialDelegation._delegatee, partialDelegation._numerator));
   }
+
+  function _isDelegateePresent(address delegatee) private view returns (bool) {
+    for (uint256 i = 0; i < _allDelegatees.length; i++) {
+        if (_allDelegatees[i] == delegatee) {
+            return true;
+        }
+    }
+    return false;
+}
 
   /**
    * @dev Must return the voting units held by an account.
