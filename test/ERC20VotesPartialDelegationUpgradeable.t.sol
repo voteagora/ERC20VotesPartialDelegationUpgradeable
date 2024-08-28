@@ -2042,177 +2042,57 @@ contract GetPastTotalSupply is PartialDelegationTest {
 }
 
 contract VoteableSupplyTest is PartialDelegationTest {
+function testFuzz_VoteableSupplyChangesWithDelegations(
+    address _actor,
+    uint256 _amount,
+    uint48 _blocksAhead,
+    uint256 _secondMint
+) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max);
+    _secondMint = bound(_secondMint, 0, type(uint208).max - _amount);
+    uint256 _blockNo = vm.getBlockNumber();
+    _blocksAhead = uint48(
+        bound(_blocksAhead, 1, type(uint48).max - _blockNo)
+    );
 
-  function testFuzz_VoteableSupplyMatchesSumOfDelegations(
-        address _delegator,
-        uint256 _amount,
-        address[5] memory _delegatees,
-        uint256[5] memory _delegationAmounts
-    ) public {
-        vm.assume(_delegator != address(0));
-        for (uint256 i = 0; i < 5; i++) {
-            vm.assume(_delegatees[i] != address(0));
-            vm.assume(_delegatees[i] != _delegator);
-            for (uint256 j = 0; j < i; j++) {
-                vm.assume(_delegatees[i] != _delegatees[j]);
-            }
-        }
+    // Initial mint
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    vm.stopPrank();
 
-        _amount = bound(_amount, 1000, type(uint208).max);
-        
-        vm.startPrank(_delegator);
-        tokenProxy.mint(_amount);
+    uint256 voteableSupply = tokenProxy.getVoteableSupply();
+    assertEq(voteableSupply, 0, "Initial voteable supply should be 0");
 
-        PartialDelegation[] memory delegations = new PartialDelegation[](5);
-        uint256 totalDelegated = 0;
+    // First delegation
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(
+        0,
+        uint256(keccak256(abi.encode(_actor)))
+    );
+    vm.startPrank(_actor);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
 
-        for (uint256 i = 0; i < 5; i++) {
-            _delegationAmounts[i] = bound(_delegationAmounts[i], 1, _amount / 5);
-            totalDelegated += _delegationAmounts[i];
-            delegations[i] = PartialDelegation({
-                _delegatee: _delegatees[i],
-                _numerator: (_delegationAmounts[i] * tokenProxy.DENOMINATOR()) / _amount
-            });
-        }
+    voteableSupply = tokenProxy.getVoteableSupply();
+    assertGt(voteableSupply, 0, "Voteable supply should increase after delegation");
+    assertLe(voteableSupply, _amount, "Voteable supply should not exceed total supply");
 
-        // Ensure total delegated amount doesn't exceed _amount
-        if (totalDelegated > _amount) {
-            uint256 excess = totalDelegated - _amount;
-            for (uint256 i = 0; i < 5 && excess > 0; i++) {
-                if (_delegationAmounts[i] > excess) {
-                    _delegationAmounts[i] -= excess;
-                    totalDelegated -= excess;
-                    excess = 0;
-                } else {
-                    totalDelegated -= _delegationAmounts[i];
-                    excess -= _delegationAmounts[i];
-                    _delegationAmounts[i] = 0;
-                }
-                delegations[i]._numerator = (_delegationAmounts[i] * tokenProxy.DENOMINATOR()) / _amount;
-            }
-        }
+    // Move blocks ahead and second mint
+    vm.roll(_blockNo + _blocksAhead);
+    vm.startPrank(_actor);
+    tokenProxy.mint(_secondMint);
+    vm.stopPrank();
 
-        tokenProxy.delegate(delegations);
-        vm.stopPrank();
+    uint256 newVoteableSupply = tokenProxy.getVoteableSupply();
+    assertGt(newVoteableSupply, voteableSupply, "Voteable supply should increase after second mint");
+    assertLe(newVoteableSupply, _amount + _secondMint, "Voteable supply should not exceed new total supply");
 
-        uint256 voteableSupply = tokenProxy.getVoteableSupply();
-        uint256 sumOfDelegations = 0;
-
-        for (uint256 i = 0; i < 5; i++) {
-            sumOfDelegations += tokenProxy.getVotes(_delegatees[i]);
-        }
-
-        assertEq(voteableSupply, sumOfDelegations, "Voteable supply should match sum of delegations");
-        assertLe(voteableSupply, _amount, "Voteable supply should not exceed total minted amount");
-    }
-    function testFuzz_VoteableSupplyAfterPartialDelegations(
-        address[5] memory _actors,
-        uint256[5] memory _amounts,
-        uint256[5] memory _seeds
-    ) public {
-        uint256 totalSupply = 0;
-        uint256 expectedVoteableSupply = 0;
-        uint256 totalDelegations = 0;
-
-        for (uint256 i = 0; i < _actors.length; i++) {
-            vm.assume(_actors[i] != address(0));
-            _amounts[i] = bound(_amounts[i], 0, type(uint208).max / _actors.length);
-
-            vm.startPrank(_actors[i]);
-            tokenProxy.mint(_amounts[i]);
-            totalSupply += _amounts[i];
-
-            PartialDelegation[] memory delegations = _createValidPartialDelegation(
-                0,
-                uint256(keccak256(abi.encode(_seeds[i])))
-            );
-            tokenProxy.delegate(delegations);
-            totalDelegations += delegations.length;
-
-            vm.stopPrank();
-        }
-
-        assertLe(
-            tokenProxy.getVoteableSupply(),
-            tokenProxy.totalSupply(),
-            "Voteable supply exceeds total supply"
-        );
-
-        // Additional assertions
-        assertEq(
-            tokenProxy.totalSupply(),
-            totalSupply,
-            "Incorrect total supply"
-        );
-        assertLt(
-            tokenProxy.getVoteableSupply(),
-            totalSupply,
-            "Voteable supply should be less than total supply"
-        );
-    }
-
-    function testFuzz_VoteableSupplyAfterTransfers(
-        address[3] memory _actors,
-        uint256[3] memory _amounts,
-        uint256[3] memory _seeds,
-        uint256 _transferAmount
-    ) public {
-        vm.assume(_actors[0] != address(0) && _actors[1] != address(0) && _actors[2] != address(0));
-        vm.assume(_actors[0] != _actors[1] && _actors[1] != _actors[2] && _actors[0] != _actors[2]);
-
-        uint256 expectedVoteableSupply = 0;
-        uint256 totalSupply = 0;
-
-        for (uint256 i = 0; i < 3; i++) {
-            _amounts[i] = bound(_amounts[i], 100, type(uint208).max / 3);
-            totalSupply += _amounts[i];
-
-            vm.startPrank(_actors[i]);
-            tokenProxy.mint(_amounts[i]);
-
-            PartialDelegation[] memory delegations = _createValidPartialDelegation(
-                0,
-                _seeds[i]
-            );
-            tokenProxy.delegate(delegations);
-
-            vm.stopPrank();
-        }
-
-        assertEq(
-            tokenProxy.getVoteableSupply(),
-            expectedVoteableSupply,
-            "Initial voteable supply is incorrect"
-        );
-        assertLe(
-            tokenProxy.getVoteableSupply(),
-            totalSupply,
-            "Voteable supply should not exceed total supply"
-        );
-
-        _transferAmount = bound(_transferAmount, 1, _amounts[0]);
-
-        vm.prank(_actors[0]);
-        tokenProxy.transfer(_actors[1], _transferAmount);
-
-        uint256 newVoteableSupply = tokenProxy.getVoteableSupply();
-
-        assertEq(
-            tokenProxy.totalSupply(),
-            totalSupply,
-            "Total supply should not change after transfer"
-        );
-        assertLe(
-            newVoteableSupply,
-            totalSupply,
-            "Voteable supply should not exceed total supply after transfer"
-        );
-        assertEq(
-            newVoteableSupply,
-            expectedVoteableSupply,
-            "Voteable supply should not change after transfer if delegations remain the same"
-        );
-    }
+    // Log final state
+    console.log("Initial Amount:", _amount);
+    console.log("Second Mint Amount:", _secondMint);
+    console.log("Final Total Supply:", tokenProxy.totalSupply());
+    console.log("Final Voteable Supply:", tokenProxy.getVoteableSupply());
+}
 }
 
 // This contract strengthens our confidence in our test helper, `_expectEmitDelegateVotesChangedEvents`

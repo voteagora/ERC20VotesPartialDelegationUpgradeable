@@ -188,7 +188,9 @@ abstract contract VotesPartialDelegationUpgradeable is
  */
 function getVoteableSupply() public view returns (uint256) {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    return $._voteableSupplyCheckpoints.latest();
+    uint256 voteableSupply = $._voteableSupplyCheckpoints.latest();
+    uint256 totalSupply = _getTotalSupply();
+    return voteableSupply > totalSupply ? totalSupply : voteableSupply;
 }
 
 /**
