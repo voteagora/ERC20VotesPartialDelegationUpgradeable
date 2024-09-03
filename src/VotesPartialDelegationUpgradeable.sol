@@ -382,7 +382,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
     // Now we want a collated list of all delegatee changes, combining the old subtractions with the new additions.
     // Ideally we'd like to process this only once.
-    _aggregateDelegationAdjustmentsAndCreateCheckpoints(_old, _new, _delegatorVotes);
+    _aggregateDelegationAdjustmentsAndCreateCheckpoints(_old, _new);
 
     // The rest of this method body replaces in storage the old delegatees with the new ones.
     // keep track of last delegatee to ensure ordering / uniqueness:
@@ -455,7 +455,8 @@ abstract contract VotesPartialDelegationUpgradeable is
     } else {
       // if there are no delegatees, we still need to adjust voteable supply
       _delegationAdjustmentsFrom = new DelegationAdjustment[](1);
-      _delegationAdjustmentsFrom[0] = DelegationAdjustment({_delegatee: address(0), _amount: uint208(amount)});
+      _delegationAdjustmentsFrom[0] =
+        DelegationAdjustment({_delegatee: address(0), _amount: SafeCast.toUint208(amount)});
     }
 
     uint256 _toLength = $._delegatees[to].length;
@@ -476,9 +477,9 @@ abstract contract VotesPartialDelegationUpgradeable is
     } else {
       // if there are no delegatees, we still need to adjust voteable supply
       _delegationAdjustmentsTo = new DelegationAdjustment[](1);
-      _delegationAdjustmentsTo[0] = DelegationAdjustment({_delegatee: address(0), _amount: uint208(amount)});
+      _delegationAdjustmentsTo[0] = DelegationAdjustment({_delegatee: address(0), _amount: SafeCast.toUint208(amount)});
     }
-    _aggregateDelegationAdjustmentsAndCreateCheckpoints(_delegationAdjustmentsFrom, _delegationAdjustmentsTo, amount);
+    _aggregateDelegationAdjustmentsAndCreateCheckpoints(_delegationAdjustmentsFrom, _delegationAdjustmentsTo);
   }
 
   /**
@@ -488,8 +489,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    */
   function _aggregateDelegationAdjustmentsAndCreateCheckpoints(
     DelegationAdjustment[] memory _old,
-    DelegationAdjustment[] memory _new,
-    uint256 _amount
+    DelegationAdjustment[] memory _new
   ) internal {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     // start with ith member of _old and jth member of _new.
@@ -541,9 +541,11 @@ abstract contract VotesPartialDelegationUpgradeable is
         j++;
       }
       if (_delegationAdjustment._amount != 0 && _delegationAdjustment._delegatee != address(0)) {
-        _votableSupplyChange = _op == Op.ADD
-          ? _votableSupplyChange + int256(uint256(_delegationAdjustment._amount))
-          : _votableSupplyChange - int256(uint256(_delegationAdjustment._amount));
+        if (_op == Op.ADD) {
+          _votableSupplyChange += int256(uint256(_delegationAdjustment._amount));
+        } else {
+          _votableSupplyChange -= int256(uint256(_delegationAdjustment._amount));
+        }
         (uint256 oldValue, uint256 newValue) = _push(
           $._delegateCheckpoints[_delegationAdjustment._delegatee],
           _operation(_op),
@@ -554,10 +556,11 @@ abstract contract VotesPartialDelegationUpgradeable is
       }
     }
     if (_votableSupplyChange != 0) {
+      bool _isPositive = _votableSupplyChange > 0;
       (uint256 oldValue, uint256 newValue) = _push(
         $._voteableSupplyCheckpoints,
-        _votableSupplyChange > 0 ? _add : _subtract,
-        SafeCast.toUint208(uint256(_votableSupplyChange))
+        _isPositive ? _add : _subtract,
+        SafeCast.toUint208(uint256(_isPositive ? _votableSupplyChange : -_votableSupplyChange))
       );
       emit VotableSupplyChanged(oldValue, newValue);
     }

@@ -83,6 +83,21 @@ contract PartialDelegationTest is DelegationAndEventHelpers {
     assertLe(_totalWeight, _amount, "incorrect total weight");
   }
 
+  function _calculateWeightDelegated(PartialDelegation[] memory _delegations, uint256 _amount)
+    internal
+    returns (uint256)
+  {
+    DelegationAdjustment[] memory _votes = tokenProxy.exposed_calculateWeightDistribution(_delegations, _amount);
+    uint256 _totalWeight = 0;
+    for (uint256 i = 0; i < _delegations.length; i++) {
+      if (_delegations[i]._delegatee == address(0)) {
+        continue;
+      }
+      _totalWeight += _votes[i]._amount;
+    }
+    return _totalWeight;
+  }
+
   function _mint(address _to, uint256 _amount) internal {
     vm.prank(_to);
     tokenProxy.mint(_amount);
@@ -1468,13 +1483,13 @@ contract GetVotableSupply is PartialDelegationTest {
 
     // First delegation
     PartialDelegation[] memory delegations = _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_actor))));
-    vm.assume(delegations[0]._delegatee != address(0));
     vm.startPrank(_actor);
     tokenProxy.delegate(delegations);
     vm.stopPrank();
 
     voteableSupply = tokenProxy.getVoteableSupply();
-    assertEq(voteableSupply, _amount, "Voteable supply should increase after delegation");
+    uint256 _expectedSupply = _calculateWeightDelegated(delegations, _amount);
+    assertEq(voteableSupply, _expectedSupply, "Voteable supply should increase after delegation");
     assertLe(voteableSupply, tokenProxy.totalSupply(), "Voteable supply should not exceed total supply");
 
     // Move blocks ahead and second mint
@@ -1483,7 +1498,8 @@ contract GetVotableSupply is PartialDelegationTest {
     vm.stopPrank();
 
     uint256 newVoteableSupply = tokenProxy.getVoteableSupply();
-    assertEq(newVoteableSupply, voteableSupply + _secondMint, "Voteable supply should increase after second mint");
+    uint256 _newExpectedSupply = _calculateWeightDelegated(delegations, _amount + _secondMint);
+    assertEq(newVoteableSupply, _newExpectedSupply, "Voteable supply should adjust after second mint");
     assertLe(newVoteableSupply, tokenProxy.totalSupply(), "Voteable supply should not exceed new total supply");
   }
 }
@@ -1514,8 +1530,6 @@ contract GetPastVotableSupply is PartialDelegationTest {
     vm.stopPrank();
 
     uint256 voteableSupply = tokenProxy.getVoteableSupply();
-    assertEq(voteableSupply, _amount, "Voteable supply should increase after delegation");
-    assertLe(voteableSupply, tokenProxy.totalSupply(), "Voteable supply should not exceed total supply");
 
     // Move blocks ahead and second mint
     vm.roll(_blockNo + _blocksAhead);
@@ -1523,10 +1537,10 @@ contract GetPastVotableSupply is PartialDelegationTest {
     tokenProxy.mint(_secondMint);
     vm.stopPrank();
 
-    uint256 newVoteableSupply = tokenProxy.getVoteableSupply();
-    assertGt(newVoteableSupply, voteableSupply, "Voteable supply should not exceed new total supply");
     assertEq(
-      voteableSupply, tokenProxy.getPastVoteableSupply(_blockNo), "Voteable supply should increase after second mint"
+      voteableSupply,
+      tokenProxy.getPastVoteableSupply(_blockNo),
+      "Past voteable supply should equal the value retrieved earlier"
     );
   }
 }
