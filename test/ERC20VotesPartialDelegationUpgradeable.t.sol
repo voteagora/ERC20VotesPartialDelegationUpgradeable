@@ -1452,18 +1452,11 @@ contract GetPastTotalSupply is PartialDelegationTest {
   }
 }
 
-contract VoteableSupplyTest is PartialDelegationTest {
-  function testFuzz_VoteableSupplyChangesWithDelegations(
-    address _actor,
-    uint256 _amount,
-    uint48 _blocksAhead,
-    uint256 _secondMint
-  ) public {
+contract GetVotableSupply is PartialDelegationTest {
+  function testFuzz_ReturnsCorrectVotableSupply(address _actor, uint256 _amount, uint256 _secondMint) public {
     vm.assume(_actor != address(0));
     _amount = bound(_amount, 0, type(uint208).max);
     _secondMint = bound(_secondMint, 0, type(uint208).max - _amount);
-    uint256 _blockNo = vm.getBlockNumber();
-    _blocksAhead = uint48(bound(_blocksAhead, 1, type(uint48).max - _blockNo));
 
     // Initial mint
     vm.startPrank(_actor);
@@ -1475,13 +1468,54 @@ contract VoteableSupplyTest is PartialDelegationTest {
 
     // First delegation
     PartialDelegation[] memory delegations = _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_actor))));
+    vm.assume(delegations[0]._delegatee != address(0));
     vm.startPrank(_actor);
     tokenProxy.delegate(delegations);
     vm.stopPrank();
 
     voteableSupply = tokenProxy.getVoteableSupply();
-    assertGt(voteableSupply, 0, "Voteable supply should increase after delegation");
-    assertLe(voteableSupply, _amount, "Voteable supply should not exceed total supply");
+    assertEq(voteableSupply, _amount, "Voteable supply should increase after delegation");
+    assertLe(voteableSupply, tokenProxy.totalSupply(), "Voteable supply should not exceed total supply");
+
+    // Move blocks ahead and second mint
+    vm.startPrank(_actor);
+    tokenProxy.mint(_secondMint);
+    vm.stopPrank();
+
+    uint256 newVoteableSupply = tokenProxy.getVoteableSupply();
+    assertEq(newVoteableSupply, voteableSupply + _secondMint, "Voteable supply should increase after second mint");
+    assertLe(newVoteableSupply, tokenProxy.totalSupply(), "Voteable supply should not exceed new total supply");
+  }
+}
+
+contract GetPastVotableSupply is PartialDelegationTest {
+  function testFuzz_ReturnsCorrectPastVotableSupply(
+    address _actor,
+    uint256 _amount,
+    uint48 _blocksAhead,
+    uint256 _secondMint
+  ) public {
+    vm.assume(_actor != address(0));
+    _amount = bound(_amount, 0, type(uint208).max - 1);
+    _secondMint = bound(_secondMint, 1, type(uint208).max - _amount);
+    uint256 _blockNo = vm.getBlockNumber();
+    _blocksAhead = uint48(bound(_blocksAhead, 1, type(uint48).max - _blockNo));
+
+    // Initial mint
+    vm.startPrank(_actor);
+    tokenProxy.mint(_amount);
+    vm.stopPrank();
+
+    // First delegation
+    PartialDelegation[] memory delegations = _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_actor))));
+    vm.assume(delegations[0]._delegatee != address(0));
+    vm.startPrank(_actor);
+    tokenProxy.delegate(delegations);
+    vm.stopPrank();
+
+    uint256 voteableSupply = tokenProxy.getVoteableSupply();
+    assertEq(voteableSupply, _amount, "Voteable supply should increase after delegation");
+    assertLe(voteableSupply, tokenProxy.totalSupply(), "Voteable supply should not exceed total supply");
 
     // Move blocks ahead and second mint
     vm.roll(_blockNo + _blocksAhead);
@@ -1490,14 +1524,10 @@ contract VoteableSupplyTest is PartialDelegationTest {
     vm.stopPrank();
 
     uint256 newVoteableSupply = tokenProxy.getVoteableSupply();
-    assertGt(newVoteableSupply, voteableSupply, "Voteable supply should increase after second mint");
-    assertLe(newVoteableSupply, _amount + _secondMint, "Voteable supply should not exceed new total supply");
-
-    // Log final state
-    console.log("Initial Amount:", _amount);
-    console.log("Second Mint Amount:", _secondMint);
-    console.log("Final Total Supply:", tokenProxy.totalSupply());
-    console.log("Final Voteable Supply:", tokenProxy.getVoteableSupply());
+    assertGt(newVoteableSupply, voteableSupply, "Voteable supply should not exceed new total supply");
+    assertEq(
+      voteableSupply, tokenProxy.getPastVoteableSupply(_blockNo), "Voteable supply should increase after second mint"
+    );
   }
 }
 

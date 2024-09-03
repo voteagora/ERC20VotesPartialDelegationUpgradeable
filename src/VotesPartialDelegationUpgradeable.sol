@@ -48,8 +48,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     Checkpoints.Trace208 _totalCheckpoints;
     // Add checkpoint for voteableSupply
     Checkpoints.Trace208 _voteableSupplyCheckpoints;
-    // Keep track of active delegates for voteableSupply calulations
-    mapping(address => bool) _activeDelegatees;
   }
 
   enum Op {
@@ -190,9 +188,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    */
   function getVoteableSupply() public view returns (uint256) {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    uint256 voteableSupply = $._voteableSupplyCheckpoints.latest();
-    uint256 totalSupply = _getTotalSupply();
-    return voteableSupply > totalSupply ? totalSupply : voteableSupply;
+    return $._voteableSupplyCheckpoints.latest();
   }
 
   /**
@@ -218,7 +214,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     if (timepoint >= currentTimepoint) {
       revert ERC5805FutureLookup(timepoint, currentTimepoint);
     }
-
     return $._voteableSupplyCheckpoints.upperLookupRecent(SafeCast.toUint48(timepoint));
   }
 
@@ -376,27 +371,14 @@ abstract contract VotesPartialDelegationUpgradeable is
     uint256 _delegatorVotes = _getVotingUnits(_delegator);
     if (_oldDelegateLength > 0) {
       _old = _calculateWeightDistribution(_oldDelegations, _delegatorVotes);
+    } else {
+      // if there are no delegatees, we still need to adjust voteable supply
+      _old = new DelegationAdjustment[](1);
+      _old[0] = DelegationAdjustment({_delegatee: address(0), _amount: uint208(_delegatorVotes)});
     }
 
     // Calculate adjustments for new delegatee set.
     DelegationAdjustment[] memory _new = _calculateWeightDistribution(_newDelegations, _delegatorVotes);
-
-    // Calculate changes in voteable supply
-    uint256 oldVoteableAmount = 0;
-    uint256 newVoteableAmount = 0;
-
-    for (uint256 i = 0; i < _oldDelegateLength; i++) {
-      oldVoteableAmount += _old[i]._amount;
-      _updateActiveDelegatee(_old[i]._delegatee, 0);
-    }
-
-    for (uint256 i = 0; i < _newDelegationsLength; i++) {
-      newVoteableAmount += _new[i]._amount;
-      _updateActiveDelegatee(_new[i]._delegatee, _new[i]._amount);
-    }
-
-    // Update voteable supply checkpoint
-    _updateVoteableSupply(oldVoteableAmount, newVoteableAmount);
 
     // Now we want a collated list of all delegatee changes, combining the old subtractions with the new additions.
     // Ideally we'd like to process this only once.
@@ -470,6 +452,10 @@ abstract contract VotesPartialDelegationUpgradeable is
           _amount: _from[i]._amount - _fromNew[i]._amount
         });
       }
+    } else {
+      // if there are no delegatees, we still need to adjust voteable supply
+      _delegationAdjustmentsFrom = new DelegationAdjustment[](1);
+      _delegationAdjustmentsFrom[0] = DelegationAdjustment({_delegatee: address(0), _amount: uint208(amount)});
     }
 
     uint256 _toLength = $._delegatees[to].length;
@@ -487,31 +473,11 @@ abstract contract VotesPartialDelegationUpgradeable is
           })
         );
       }
+    } else {
+      // if there are no delegatees, we still need to adjust voteable supply
+      _delegationAdjustmentsTo = new DelegationAdjustment[](1);
+      _delegationAdjustmentsTo[0] = DelegationAdjustment({_delegatee: address(0), _amount: uint208(amount)});
     }
-
-    // Calculate changes in voteable supply
-    uint256 fromVoteableChange = 0;
-    uint256 toVoteableChange = 0;
-
-    for (uint256 i = 0; i < _fromLength; i++) {
-      fromVoteableChange += _delegationAdjustmentsFrom[i]._amount;
-      _updateActiveDelegatee(
-        _delegationAdjustmentsFrom[i]._delegatee,
-        getVotes(_delegationAdjustmentsFrom[i]._delegatee) - _delegationAdjustmentsFrom[i]._amount
-      );
-    }
-
-    for (uint256 i = 0; i < _toLength; i++) {
-      toVoteableChange += _delegationAdjustmentsTo[i]._amount;
-      _updateActiveDelegatee(
-        _delegationAdjustmentsTo[i]._delegatee,
-        getVotes(_delegationAdjustmentsTo[i]._delegatee) + _delegationAdjustmentsTo[i]._amount
-      );
-    }
-
-    // Update voteable supply checkpoint
-    _updateVoteableSupply(fromVoteableChange, toVoteableChange);
-
     _aggregateDelegationAdjustmentsAndCreateCheckpoints(_delegationAdjustmentsFrom, _delegationAdjustmentsTo);
   }
 
@@ -572,15 +538,27 @@ abstract contract VotesPartialDelegationUpgradeable is
         }
         j++;
       }
+      if (_delegationAdjustment._amount != 0) {
+        if (_delegationAdjustment._delegatee == address(0)) {
+          // if delegatee is address(0), that means a change in voteable supply.
+          // We flip the operation to ensure that the voteable supply is adjusted correctly.
+          if (_op == Op.ADD) {
+            _op = Op.SUBTRACT;
+          } else {
+            _op = Op.ADD;
+          }
+          (uint256 oldValue, uint256 newValue) =
+            _push($._voteableSupplyCheckpoints, _operation(_op), SafeCast.toUint208(_delegationAdjustment._amount));
+          emit VotableSupplyChanged(oldValue, newValue);
+        } else {
+          (uint256 oldValue, uint256 newValue) = _push(
+            $._delegateCheckpoints[_delegationAdjustment._delegatee],
+            _operation(_op),
+            SafeCast.toUint208(_delegationAdjustment._amount)
+          );
 
-      if (_delegationAdjustment._amount != 0 && _delegationAdjustment._delegatee != address(0)) {
-        (uint256 oldValue, uint256 newValue) = _push(
-          $._delegateCheckpoints[_delegationAdjustment._delegatee],
-          _operation(_op),
-          SafeCast.toUint208(_delegationAdjustment._amount)
-        );
-
-        emit DelegateVotesChanged(_delegationAdjustment._delegatee, oldValue, newValue);
+          emit DelegateVotesChanged(_delegationAdjustment._delegatee, oldValue, newValue);
+        }
       }
     }
   }
@@ -655,30 +633,9 @@ abstract contract VotesPartialDelegationUpgradeable is
     return
       keccak256(abi.encode(PARTIAL_DELEGATION_TYPEHASH, partialDelegation._delegatee, partialDelegation._numerator));
   }
-
-  function _updateVoteableSupply(uint256 oldAmount, uint256 newAmount) internal {
-    if (oldAmount != newAmount) {
-      VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-      if (newAmount > oldAmount) {
-        _push($._voteableSupplyCheckpoints, _add, SafeCast.toUint208(newAmount - oldAmount));
-      } else {
-        _push($._voteableSupplyCheckpoints, _subtract, SafeCast.toUint208(oldAmount - newAmount));
-      }
-    }
-  }
-
-  function _updateActiveDelegatee(address delegatee, uint256 newAmount) internal {
-    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    bool isCurrentlyActive = $._activeDelegatees[delegatee];
-    bool shouldBeActive = newAmount > 0;
-
-    if (isCurrentlyActive != shouldBeActive) {
-      $._activeDelegatees[delegatee] = shouldBeActive;
-    }
-  }
-
   /**
    * @dev Must return the voting units held by an account.
    */
+
   function _getVotingUnits(address) internal view virtual returns (uint256);
 }
