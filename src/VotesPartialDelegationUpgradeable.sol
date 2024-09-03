@@ -371,10 +371,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     uint256 _delegatorVotes = _getVotingUnits(_delegator);
     if (_oldDelegateLength > 0) {
       _old = _calculateWeightDistribution(_oldDelegations, _delegatorVotes);
-    } else {
-      // if there are no delegatees, we still need to adjust voteable supply
-      _old = new DelegationAdjustment[](1);
-      _old[0] = DelegationAdjustment({_delegatee: address(0), _amount: uint208(_delegatorVotes)});
     }
 
     // Calculate adjustments for new delegatee set.
@@ -452,11 +448,6 @@ abstract contract VotesPartialDelegationUpgradeable is
           _amount: _from[i]._amount - _fromNew[i]._amount
         });
       }
-    } else {
-      // if there are no delegatees, we still need to adjust voteable supply
-      _delegationAdjustmentsFrom = new DelegationAdjustment[](1);
-      _delegationAdjustmentsFrom[0] =
-        DelegationAdjustment({_delegatee: address(0), _amount: SafeCast.toUint208(amount)});
     }
 
     uint256 _toLength = $._delegatees[to].length;
@@ -474,10 +465,6 @@ abstract contract VotesPartialDelegationUpgradeable is
           })
         );
       }
-    } else {
-      // if there are no delegatees, we still need to adjust voteable supply
-      _delegationAdjustmentsTo = new DelegationAdjustment[](1);
-      _delegationAdjustmentsTo[0] = DelegationAdjustment({_delegatee: address(0), _amount: SafeCast.toUint208(amount)});
     }
     _aggregateDelegationAdjustmentsAndCreateCheckpoints(_delegationAdjustmentsFrom, _delegationAdjustmentsTo);
   }
@@ -636,9 +623,9 @@ abstract contract VotesPartialDelegationUpgradeable is
     return
       keccak256(abi.encode(PARTIAL_DELEGATION_TYPEHASH, partialDelegation._delegatee, partialDelegation._numerator));
   }
+
   /**
    * @dev Must return the voting units held by an account.
    */
-
   function _getVotingUnits(address) internal view virtual returns (uint256);
 }
