@@ -68,7 +68,7 @@ contract PartialDelegationTest is DelegationAndEventHelpers {
 
   function assertCorrectVotableSupply(PartialDelegation[] memory _delegations, uint256 _amount) internal {
     uint256 _totalWeight = _calculateWeightDelegated(_delegations, _amount);
-    assertEq(_totalWeight, tokenProxy.getVoteableSupply(), "incorrect votable supply");
+    assertEq(_totalWeight, tokenProxy.getVotableSupply(), "incorrect votable supply");
   }
 
   function assertCorrectPastVotes(PartialDelegation[] memory _delegations, uint256 _amount, uint256 _timepoint)
@@ -700,7 +700,7 @@ contract DelegateLegacy is PartialDelegationTest {
     tokenProxy.delegate(_delegatee);
     assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
     assertEq(tokenProxy.getVotes(_delegatee), _delegatorBalance);
-    assertEq(tokenProxy.getVoteableSupply(), _delegatorBalance);
+    assertEq(tokenProxy.getVotableSupply(), _delegatorBalance);
   }
 
   function testFuzz_DelegatesSuccessfullyToZeroAddress(
@@ -719,7 +719,7 @@ contract DelegateLegacy is PartialDelegationTest {
     tokenProxy.delegate(_delegatee);
     assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
     assertEq(tokenProxy.getVotes(_delegatee), 0);
-    assertEq(tokenProxy.getVoteableSupply(), 0);
+    assertEq(tokenProxy.getVotableSupply(), 0);
   }
 
   function testFuzz_RedelegatesSuccessfully(
@@ -746,7 +746,7 @@ contract DelegateLegacy is PartialDelegationTest {
     assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_newDelegatee));
     _expectedVotes = _newDelegatee == address(0) ? 0 : _delegatorBalance;
     assertEq(tokenProxy.getVotes(_newDelegatee), _expectedVotes);
-    assertEq(tokenProxy.getVoteableSupply(), _expectedVotes);
+    assertEq(tokenProxy.getVotableSupply(), _expectedVotes);
   }
 
   function testFuzz_RedelegatesToAPartialDelegationSuccessfully(
@@ -805,7 +805,7 @@ contract DelegateBySig is PartialDelegationTest {
     tokenProxy.delegateBySig(_delegatee, _currentNonce, _deadline, _v, _r, _s);
     assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
     assertEq(tokenProxy.getVotes(_delegatee), _delegatorBalance);
-    assertEq(tokenProxy.getVoteableSupply(), _delegatorBalance);
+    assertEq(tokenProxy.getVotableSupply(), _delegatorBalance);
   }
 
   function testFuzz_DelegatesSuccessfullyToZeroAddress(
@@ -832,7 +832,7 @@ contract DelegateBySig is PartialDelegationTest {
     tokenProxy.delegateBySig(_delegatee, _currentNonce, _deadline, _v, _r, _s);
     assertEq(tokenProxy.delegates(_delegator), _createSingleFullDelegation(_delegatee));
     assertEq(tokenProxy.getVotes(_delegatee), 0);
-    assertEq(tokenProxy.getVoteableSupply(), 0);
+    assertEq(tokenProxy.getVotableSupply(), 0);
   }
 
   function testFuzz_RevertIf_DelegatesViaERC712SignatureWithExpiredDeadline(
@@ -1552,8 +1552,8 @@ contract GetVotableSupply is PartialDelegationTest {
     tokenProxy.mint(_amount);
     vm.stopPrank();
 
-    uint256 voteableSupply = tokenProxy.getVoteableSupply();
-    assertEq(voteableSupply, 0, "Initial voteable supply should be 0");
+    uint256 votableSupply = tokenProxy.getVotableSupply();
+    assertEq(votableSupply, 0, "Initial votable supply should be 0");
 
     // First delegation
     PartialDelegation[] memory delegations = _createValidPartialDelegation(0, uint256(keccak256(abi.encode(_actor))));
@@ -1561,20 +1561,20 @@ contract GetVotableSupply is PartialDelegationTest {
     tokenProxy.delegate(delegations);
     vm.stopPrank();
 
-    voteableSupply = tokenProxy.getVoteableSupply();
+    votableSupply = tokenProxy.getVotableSupply();
     uint256 _expectedSupply = _calculateWeightDelegated(delegations, _amount);
-    assertEq(voteableSupply, _expectedSupply, "Voteable supply should increase after delegation");
-    assertLe(voteableSupply, tokenProxy.totalSupply(), "Voteable supply should not exceed total supply");
+    assertEq(votableSupply, _expectedSupply, "Votable supply should increase after delegation");
+    assertLe(votableSupply, tokenProxy.totalSupply(), "Votable supply should not exceed total supply");
 
     // Move blocks ahead and second mint
     vm.startPrank(_actor);
     tokenProxy.mint(_secondMint);
     vm.stopPrank();
 
-    uint256 newVoteableSupply = tokenProxy.getVoteableSupply();
+    uint256 newVotableSupply = tokenProxy.getVotableSupply();
     uint256 _newExpectedSupply = _calculateWeightDelegated(delegations, _amount + _secondMint);
-    assertEq(newVoteableSupply, _newExpectedSupply, "Voteable supply should adjust after second mint");
-    assertLe(newVoteableSupply, tokenProxy.totalSupply(), "Voteable supply should not exceed new total supply");
+    assertEq(newVotableSupply, _newExpectedSupply, "Votable supply should adjust after second mint");
+    assertLe(newVotableSupply, tokenProxy.totalSupply(), "Votable supply should not exceed new total supply");
   }
 }
 
@@ -1603,7 +1603,7 @@ contract GetPastVotableSupply is PartialDelegationTest {
     tokenProxy.delegate(delegations);
     vm.stopPrank();
 
-    uint256 voteableSupply = tokenProxy.getVoteableSupply();
+    uint256 votableSupply = tokenProxy.getVotableSupply();
 
     // Move blocks ahead and second mint
     vm.roll(_blockNo + _blocksAhead);
@@ -1612,9 +1612,9 @@ contract GetPastVotableSupply is PartialDelegationTest {
     vm.stopPrank();
 
     assertEq(
-      voteableSupply,
-      tokenProxy.getPastVoteableSupply(_blockNo),
-      "Past voteable supply should equal the value retrieved earlier"
+      votableSupply,
+      tokenProxy.getPastVotableSupply(_blockNo),
+      "Past votable supply should equal the value retrieved earlier"
     );
   }
 }

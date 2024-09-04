@@ -46,8 +46,8 @@ abstract contract VotesPartialDelegationUpgradeable is
     mapping(address account => PartialDelegation[]) _delegatees;
     mapping(address delegatee => Checkpoints.Trace208) _delegateCheckpoints;
     Checkpoints.Trace208 _totalCheckpoints;
-    // Add checkpoint for voteableSupply
-    Checkpoints.Trace208 _voteableSupplyCheckpoints;
+    // Add checkpoint for votableSupply
+    Checkpoints.Trace208 _votableSupplyCheckpoints;
   }
 
   enum Op {
@@ -180,15 +180,15 @@ abstract contract VotesPartialDelegationUpgradeable is
   /**
    * @dev Returns the current total number of tokens that have been delegated for voting.
    *
-   * This value represents the "voteable supply," which is the sum of all tokens that have been delegated to
+   * This value represents the "votable supply," which is the sum of all tokens that have been delegated to
    * representatives.
    * Tokens that have not been delegated are not included in this count.
    *
    * NOTE: This value is the sum of all delegated votes at the current block.
    */
-  function getVoteableSupply() public view returns (uint256) {
+  function getVotableSupply() public view returns (uint256) {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
-    return $._voteableSupplyCheckpoints.latest();
+    return $._votableSupplyCheckpoints.latest();
   }
 
   /**
@@ -196,7 +196,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    * If the `clock()` is configured to use block numbers, this will return the value at the end of the corresponding
    * block.
    *
-   * This value represents the "voteable supply" at a given timepoint, which is the sum of all tokens that were
+   * This value represents the "votable supply" at a given timepoint, which is the sum of all tokens that were
    * delegated
    * to representatives at that specific moment.
    *
@@ -206,15 +206,15 @@ abstract contract VotesPartialDelegationUpgradeable is
    *
    * - `timepoint` must be in the past. If operating using block numbers, the block must be already mined.
    *
-   * @param timepoint The block number or timestamp to query the voteable supply at.
+   * @param timepoint The block number or timestamp to query the votable supply at.
    */
-  function getPastVoteableSupply(uint256 timepoint) public view virtual returns (uint256) {
+  function getPastVotableSupply(uint256 timepoint) public view virtual returns (uint256) {
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
     uint48 currentTimepoint = clock();
     if (timepoint >= currentTimepoint) {
       revert ERC5805FutureLookup(timepoint, currentTimepoint);
     }
-    return $._voteableSupplyCheckpoints.upperLookupRecent(SafeCast.toUint48(timepoint));
+    return $._votableSupplyCheckpoints.upperLookupRecent(SafeCast.toUint48(timepoint));
   }
 
   /**
@@ -415,7 +415,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
   /**
    * @dev Transfers, mints, or burns voting units. To register a mint, `from` should be zero. To register a burn, `to`
-   * should be zero. Total supply of voting units will be adjusted with mints and burns. Voteable supply will also stay
+   * should be zero. Total supply of voting units will be adjusted with mints and burns. Votable supply will also stay
    * updated.
    */
   function _transferVotingUnits(address from, address to, uint256 amount) internal virtual {
@@ -545,7 +545,7 @@ abstract contract VotesPartialDelegationUpgradeable is
     if (_votableSupplyChange != 0) {
       bool _isPositive = _votableSupplyChange > 0;
       (uint256 oldValue, uint256 newValue) = _push(
-        $._voteableSupplyCheckpoints,
+        $._votableSupplyCheckpoints,
         _isPositive ? _add : _subtract,
         SafeCast.toUint208(uint256(_isPositive ? _votableSupplyChange : -_votableSupplyChange))
       );
