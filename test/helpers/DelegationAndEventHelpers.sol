@@ -16,6 +16,8 @@ contract DelegationAndEventHelpers is Test {
   /// @dev Emitted when a token transfer or delegate change results in changes to a delegate's number of voting units.
   event DelegateVotesChanged(address indexed delegate, uint256 previousVotes, uint256 newVotes);
 
+  event VotableSupplyChanged(uint256 oldVotableSupply, uint256 newVotableSupply);
+
   function initialize(address _token) public virtual {
     token = ERC20VotesPartialDelegationUpgradeable(_token);
   }
