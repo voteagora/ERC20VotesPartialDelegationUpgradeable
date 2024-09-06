@@ -46,7 +46,6 @@ abstract contract VotesPartialDelegationUpgradeable is
     mapping(address account => PartialDelegation[]) _delegatees;
     mapping(address delegatee => Checkpoints.Trace208) _delegateCheckpoints;
     Checkpoints.Trace208 _totalCheckpoints;
-    // Add checkpoint for votableSupply
     Checkpoints.Trace208 _votableSupplyCheckpoints;
   }
 
@@ -388,8 +387,7 @@ abstract contract VotesPartialDelegationUpgradeable is
       // check sorting and uniqueness
       if (i == 0 && _newDelegations[i]._delegatee == address(0)) {
         // zero delegation is allowed if in 0th position
-      }
-      else if (_newDelegations[i]._delegatee <= _lastDelegatee) {
+      } else if (_newDelegations[i]._delegatee <= _lastDelegatee) {
         revert DuplicateOrUnsortedDelegatees(_newDelegations[i]._delegatee);
       }
 
@@ -415,8 +413,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
   /**
    * @dev Transfers, mints, or burns voting units. To register a mint, `from` should be zero. To register a burn, `to`
-   * should be zero. Total supply of voting units will be adjusted with mints and burns. Votable supply will also stay
-   * updated.
+   * should be zero. Total and votable supplies will be adjusted with mints and burns.
    */
   function _transferVotingUnits(address from, address to, uint256 amount) internal virtual {
     // skip from==to no-op, as the math would require special handling
