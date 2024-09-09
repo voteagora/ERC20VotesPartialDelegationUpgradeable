@@ -36,6 +36,11 @@ interface IVotesPartialDelegation is IERC6372 {
   event DelegateVotesChanged(address indexed delegate, uint256 previousVotes, uint256 newVotes);
 
   /**
+   * @dev Emitted when the votable supply changes.
+   */
+  event VotableSupplyChanged(uint256 previousSupply, uint256 newSupply);
+
+  /**
    * @dev Returns the current amount of votes that `account` has.
    */
   function getVotes(address account) external view returns (uint256);
@@ -55,6 +60,16 @@ interface IVotesPartialDelegation is IERC6372 {
    * vote.
    */
   function getPastTotalSupply(uint256 timepoint) external view returns (uint256);
+
+  /**
+   * @dev Return the latest votable supply.
+   */
+  function getVotableSupply() external view returns (uint256);
+
+  /**
+   * @dev Return the votable supply at a given block number.
+   */
+  function getPastVotableSupply(uint256 timepoint) external view returns (uint256);
 
   /**
    * @dev Returns the delegate that `account` has chosen.

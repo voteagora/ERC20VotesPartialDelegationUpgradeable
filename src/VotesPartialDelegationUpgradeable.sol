@@ -46,6 +46,7 @@ abstract contract VotesPartialDelegationUpgradeable is
     mapping(address account => PartialDelegation[]) _delegatees;
     mapping(address delegatee => Checkpoints.Trace208) _delegateCheckpoints;
     Checkpoints.Trace208 _totalCheckpoints;
+    Checkpoints.Trace208 _votableSupplyCheckpoints;
   }
 
   enum Op {
@@ -173,6 +174,46 @@ abstract contract VotesPartialDelegationUpgradeable is
       revert ERC5805FutureLookup(timepoint, currentTimepoint);
     }
     return $._totalCheckpoints.upperLookupRecent(SafeCast.toUint48(timepoint));
+  }
+
+  /**
+   * @dev Returns the current total number of tokens that have been delegated for voting.
+   *
+   * This value represents the "votable supply," which is the sum of all tokens that have been delegated to
+   * representatives.
+   * Tokens that have not been delegated are not included in this count.
+   *
+   * NOTE: This value is the sum of all delegated votes at the current block.
+   */
+  function getVotableSupply() public view returns (uint256) {
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
+    return $._votableSupplyCheckpoints.latest();
+  }
+
+  /**
+   * @dev Returns the total number of tokens that were delegated for voting at a specific moment in the past.
+   * If the `clock()` is configured to use block numbers, this will return the value at the end of the corresponding
+   * block.
+   *
+   * This value represents the "votable supply" at a given timepoint, which is the sum of all tokens that were
+   * delegated
+   * to representatives at that specific moment.
+   *
+   * NOTE: This value is the sum of all delegated votes at the specified timepoint.
+   *
+   * Requirements:
+   *
+   * - `timepoint` must be in the past. If operating using block numbers, the block must be already mined.
+   *
+   * @param timepoint The block number or timestamp to query the votable supply at.
+   */
+  function getPastVotableSupply(uint256 timepoint) public view virtual returns (uint256) {
+    VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
+    uint48 currentTimepoint = clock();
+    if (timepoint >= currentTimepoint) {
+      revert ERC5805FutureLookup(timepoint, currentTimepoint);
+    }
+    return $._votableSupplyCheckpoints.upperLookupRecent(SafeCast.toUint48(timepoint));
   }
 
   /**
@@ -358,6 +399,7 @@ abstract contract VotesPartialDelegationUpgradeable is
       else {
         $._delegatees[_delegator].push(_newDelegations[i]);
       }
+
       _lastDelegatee = _newDelegations[i]._delegatee;
     }
     // remove any remaining old delegatees
@@ -371,7 +413,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
   /**
    * @dev Transfers, mints, or burns voting units. To register a mint, `from` should be zero. To register a burn, `to`
-   * should be zero. Total supply of voting units will be adjusted with mints and burns.
+   * should be zero. Total and votable supplies will be adjusted with mints and burns.
    */
   function _transferVotingUnits(address from, address to, uint256 amount) internal virtual {
     // skip from==to no-op, as the math would require special handling
@@ -379,8 +421,9 @@ abstract contract VotesPartialDelegationUpgradeable is
       return;
     }
 
-    // update total supply checkpoints if mint/burn
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
+
+    // update total supply checkpoints if mint/burn
     if (from == address(0)) {
       _push($._totalCheckpoints, _add, SafeCast.toUint208(amount));
     }
@@ -388,7 +431,7 @@ abstract contract VotesPartialDelegationUpgradeable is
       _push($._totalCheckpoints, _subtract, SafeCast.toUint208(amount));
     }
 
-    // finally, calculate delegatee vote changes and create checkpoints accordingly
+    // calculate delegatee vote changes and create checkpoints accordingly
     uint256 _fromLength = $._delegatees[from].length;
     DelegationAdjustment[] memory _delegationAdjustmentsFrom = new DelegationAdjustment[](_fromLength);
     // We'll need to adjust the delegatee votes for both "from" and "to" delegatee sets.
@@ -441,6 +484,7 @@ abstract contract VotesPartialDelegationUpgradeable is
     uint256 j;
     uint256 _oldLength = _old.length;
     uint256 _newLength = _new.length;
+    int256 _votableSupplyChange;
     while (i < _oldLength || j < _newLength) {
       DelegationAdjustment memory _delegationAdjustment;
       Op _op;
@@ -480,8 +524,12 @@ abstract contract VotesPartialDelegationUpgradeable is
         }
         j++;
       }
-
       if (_delegationAdjustment._amount != 0 && _delegationAdjustment._delegatee != address(0)) {
+        if (_op == Op.ADD) {
+          _votableSupplyChange += int256(uint256(_delegationAdjustment._amount));
+        } else {
+          _votableSupplyChange -= int256(uint256(_delegationAdjustment._amount));
+        }
         (uint256 oldValue, uint256 newValue) = _push(
           $._delegateCheckpoints[_delegationAdjustment._delegatee],
           _operation(_op),
@@ -490,6 +538,15 @@ abstract contract VotesPartialDelegationUpgradeable is
 
         emit DelegateVotesChanged(_delegationAdjustment._delegatee, oldValue, newValue);
       }
+    }
+    if (_votableSupplyChange != 0) {
+      bool _isPositive = _votableSupplyChange > 0;
+      (uint256 oldValue, uint256 newValue) = _push(
+        $._votableSupplyCheckpoints,
+        _isPositive ? _add : _subtract,
+        SafeCast.toUint208(uint256(_isPositive ? _votableSupplyChange : -_votableSupplyChange))
+      );
+      emit VotableSupplyChanged(oldValue, newValue);
     }
   }
 
