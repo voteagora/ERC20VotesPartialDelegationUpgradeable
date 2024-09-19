@@ -59,7 +59,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
   /// @notice Typehash for partial delegation.
   bytes32 public constant PARTIAL_DELEGATION_ON_BEHALF_TYPEHASH = keccak256(
-    "PartialDelegationOnBehalf(address delegator,PartialDelegation[] delegations,uint256 nonce,uint256 expiry)"
+    "PartialDelegationOnBehalf(address delegator,PartialDelegation[] delegations,uint256 nonce,uint256 expiry)PartialDelegation(address delegatee,uint96 numerator)"
   );
   /// @notice Typehash for partial delegation.
   bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
