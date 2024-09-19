@@ -30,6 +30,7 @@ contract L2GovToken is AccessControlUpgradeable, ERC20VotesPartialDelegationUpgr
     __EIP712_init(_name, "1");
     __ERC20Permit_init(_name);
     __AccessControl_init();
+    __VotesPartialDelegation_init();
     if (_admin == address(0)) {
       revert InvalidAddressZero();
     }
