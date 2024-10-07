@@ -24,7 +24,7 @@ contract DeployL2GovToken is Script {
   }
 
   function run() public virtual {
-    vm.startBroadcast(deployer);
+    vm.startBroadcast(msg.sender);
     L2GovToken token = new L2GovToken();
     console.log("L2GovToken impl:\t", address(token));
     proxy = L2GovToken(
