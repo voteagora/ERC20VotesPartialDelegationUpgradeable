@@ -491,10 +491,10 @@ abstract contract VotesPartialDelegationUpgradeable is
     if (_fromLength > 0) {
       uint256 _fromVotes = _getVotingUnits(from);
       DelegationAdjustment[] memory _from = _calculateWeightDistribution($._delegatees[from], _fromVotes + amount);
-      DelegationAdjustment[] memory fromNew = _calculateWeightDistribution($._delegatees[from], _fromVotes);
+      DelegationAdjustment[] memory _fromNew = _calculateWeightDistribution($._delegatees[from], _fromVotes);
       for (uint256 i; i < _fromLength; i++) {
         (uint256 oldValue, uint256 newValue) = _push(
-          $._delegateCheckpoints[$._delegatees[from][i]._delegatee], Math.trySub, _from[i]._amount - fromNew[i]._amount
+          $._delegateCheckpoints[$._delegatees[from][i]._delegatee], Math.trySub, _from[i]._amount - _fromNew[i]._amount
         );
 
         emit DelegateVotesChanged($._delegatees[from][i]._delegatee, oldValue, newValue);
@@ -506,11 +506,12 @@ abstract contract VotesPartialDelegationUpgradeable is
     if (_toLength > 0) {
       uint256 _toVotes = _getVotingUnits(to);
       DelegationAdjustment[] memory _to = _calculateWeightDistribution($._delegatees[to], _toVotes - amount);
-      DelegationAdjustment[] memory toNew = _calculateWeightDistribution($._delegatees[to], _toVotes);
+      DelegationAdjustment[] memory _toNew = _calculateWeightDistribution($._delegatees[to], _toVotes);
 
       for (uint256 i; i < _toLength; i++) {
-        (uint256 oldValue, uint256 newValue) =
-          _push($._delegateCheckpoints[$._delegatees[to][i]._delegatee], Math.tryAdd, toNew[i]._amount - _to[i]._amount);
+        (uint256 oldValue, uint256 newValue) = _push(
+          $._delegateCheckpoints[$._delegatees[to][i]._delegatee], Math.tryAdd, _toNew[i]._amount - _to[i]._amount
+        );
 
         emit DelegateVotesChanged($._delegatees[to][i]._delegatee, oldValue, newValue);
       }
