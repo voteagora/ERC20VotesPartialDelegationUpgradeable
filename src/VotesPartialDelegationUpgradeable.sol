@@ -348,7 +348,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    * actions.
    */
   function invalidateNonce() external {
-    _useNonce(msg.sender);
+    _useNonce(_msgSender());
   }
 
   /**
@@ -570,8 +570,9 @@ abstract contract VotesPartialDelegationUpgradeable is
       if (_delegations[i]._numerator == 0) {
         revert InvalidNumeratorZero();
       }
-      _delegationAdjustments[i] =
-        DelegationAdjustment(_delegations[i]._delegatee, uint208(_amount * _delegations[i]._numerator / DENOMINATOR));
+      _delegationAdjustments[i] = DelegationAdjustment(
+        _delegations[i]._delegatee, SafeCast.toUint208(_amount * _delegations[i]._numerator / DENOMINATOR)
+      );
       _totalNumerator += _delegations[i]._numerator;
     }
     if (_totalNumerator > DENOMINATOR) {

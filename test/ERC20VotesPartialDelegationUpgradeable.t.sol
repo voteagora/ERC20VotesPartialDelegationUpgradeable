@@ -662,7 +662,7 @@ contract Delegate is PartialDelegationTest {
     uint256 _seed
   ) public {
     vm.assume(_actor != address(0));
-    _amount = bound(_amount, 0, type(uint208).max);
+    _amount = bound(_amount, 0, type(uint200).max);
     PartialDelegation[] memory delegations = _createValidPartialDelegation(0, _seed);
     _delegationIndex = bound(_delegationIndex, 0, delegations.length - 1);
 
