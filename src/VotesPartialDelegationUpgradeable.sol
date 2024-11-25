@@ -369,7 +369,7 @@ abstract contract VotesPartialDelegationUpgradeable is
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
 
     // Calculate adjustments for old delegatee set, if it exists.
-    PartialDelegation[] memory _oldDelegations = delegates(_delegator);
+    PartialDelegation[] memory _oldDelegations = $._delegatees[_delegator];
     uint256 _oldDelegateLength = _oldDelegations.length;
     DelegationAdjustment[] memory _old = new DelegationAdjustment[](_oldDelegateLength);
     uint256 _delegatorVotes = _getVotingUnits(_delegator);
