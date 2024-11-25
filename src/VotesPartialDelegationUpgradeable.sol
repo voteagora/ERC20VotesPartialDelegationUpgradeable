@@ -446,7 +446,7 @@ abstract contract VotesPartialDelegationUpgradeable is
       DelegationAdjustment[] memory _fromNew = _calculateWeightDistribution($._delegatees[from], _fromVotes);
       for (uint256 i; i < _fromLength; i++) {
         _delegationAdjustmentsFrom[i] = DelegationAdjustment({
-          _delegatee: $._delegatees[from][i]._delegatee,
+          _delegatee: _from[i]._delegatee,
           _amount: _from[i]._amount - _fromNew[i]._amount
         });
       }
