@@ -421,8 +421,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    * should be zero. Total and votable supplies will be adjusted with mints and burns.
    */
   function _transferVotingUnits(address from, address to, uint256 amount) internal virtual {
-    // skip from==to no-op, as the math would require special handling
-    if (from == to) {
+    if (from == to || amount == 0) {
       return;
     }
 
