@@ -64,8 +64,6 @@ abstract contract VotesPartialDelegationUpgradeable is
   /// @notice Typehash for partial delegation.
   bytes32 public constant PARTIAL_DELEGATION_TYPEHASH =
     keccak256("PartialDelegation(address delegatee,uint96 numerator)");
-  /// @notice Max # of partial delegations that can be specified in a partial delegation set.
-  uint256 public constant MAX_PARTIAL_DELEGATIONS = 100;
   /// @notice Denominator of a partial delegation fraction.
   uint96 public constant DENOMINATOR = 10_000;
   // keccak256(abi.encode(uint256(keccak256("storage.VotesPartialDelegation")) - 1)) &~bytes32(uint256(0xff))
@@ -128,6 +126,13 @@ abstract contract VotesPartialDelegationUpgradeable is
       revert ERC6372InconsistentClock();
     }
     return "mode=blocknumber&from=default";
+  }
+
+  /**
+   * @dev Returns the maximum number of partial delegations permitted for a single delegator.
+   */
+  function MAX_PARTIAL_DELEGATIONS() public view virtual returns (uint256) {
+    return 100;
   }
 
   /**
@@ -357,8 +362,8 @@ abstract contract VotesPartialDelegationUpgradeable is
    */
   function _delegate(address _delegator, PartialDelegation[] memory _newDelegations) internal virtual {
     uint256 _newDelegationsLength = _newDelegations.length;
-    if (_newDelegationsLength > MAX_PARTIAL_DELEGATIONS) {
-      revert PartialDelegationLimitExceeded(_newDelegationsLength, MAX_PARTIAL_DELEGATIONS);
+    if (_newDelegationsLength > MAX_PARTIAL_DELEGATIONS()) {
+      revert PartialDelegationLimitExceeded(_newDelegationsLength, MAX_PARTIAL_DELEGATIONS());
     }
 
     VotesPartialDelegationStorage storage $ = _getVotesPartialDelegationStorage();
