@@ -445,10 +445,8 @@ abstract contract VotesPartialDelegationUpgradeable is
       DelegationAdjustment[] memory _from = _calculateWeightDistribution($._delegatees[from], _fromVotes + amount);
       DelegationAdjustment[] memory _fromNew = _calculateWeightDistribution($._delegatees[from], _fromVotes);
       for (uint256 i; i < _fromLength; i++) {
-        _delegationAdjustmentsFrom[i] = DelegationAdjustment({
-          _delegatee: $._delegatees[from][i]._delegatee,
-          _amount: _from[i]._amount - _fromNew[i]._amount
-        });
+        _delegationAdjustmentsFrom[i] =
+          DelegationAdjustment({_delegatee: _from[i]._delegatee, _amount: _from[i]._amount - _fromNew[i]._amount});
       }
     }
 
@@ -460,12 +458,8 @@ abstract contract VotesPartialDelegationUpgradeable is
       DelegationAdjustment[] memory _toNew = _calculateWeightDistribution($._delegatees[to], _toVotes);
 
       for (uint256 i; i < _toLength; i++) {
-        _delegationAdjustmentsTo[i] = (
-          DelegationAdjustment({
-            _delegatee: $._delegatees[to][i]._delegatee,
-            _amount: _toNew[i]._amount - _to[i]._amount
-          })
-        );
+        _delegationAdjustmentsTo[i] =
+          (DelegationAdjustment({_delegatee: _to[i]._delegatee, _amount: _toNew[i]._amount - _to[i]._amount}));
       }
     }
     _aggregateDelegationAdjustmentsAndCreateCheckpoints(_delegationAdjustmentsFrom, _delegationAdjustmentsTo);
