@@ -26,11 +26,11 @@ contract L2GovToken is AccessControlUpgradeable, ERC20VotesPartialDelegationUpgr
    * @dev Reverts if the provided admin address is zero.
    */
   function initialize(address _admin, string calldata _name, string calldata _symbol) public initializer {
-    __ERC20VotesPartialDelegation_init(_name, _symbol);
-    __AccessControl_init();
     if (_admin == address(0)) {
       revert InvalidAddressZero();
     }
+    __ERC20VotesPartialDelegation_init(_name, _symbol);
+    __AccessControl_init();
     _grantRole(DEFAULT_ADMIN_ROLE, _admin);
   }
 

@@ -37,12 +37,8 @@ abstract contract ERC20VotesPartialDelegationUpgradeable is
     __VotesPartialDelegation_init();
   }
 
-  function __ERC20VotesPartialDelegation_init_unchained(string calldata _name, string calldata _symbol) internal onlyInitializing {
-    __ERC20_init(_name, _symbol);
-    __EIP712_init(_name, "1");
-    __ERC20Permit_init(_name);
-    __VotesPartialDelegation_init();
-  }
+  function __ERC20VotesPartialDelegation_init_unchained() internal onlyInitializing {}
+
   /**
    * @dev Maximum token supply. Defaults to `type(uint208).max` (2^208^ - 1).
    *
@@ -53,7 +49,6 @@ abstract contract ERC20VotesPartialDelegationUpgradeable is
    * additional logic requires it. When resolving override conflicts on this function, the minimum should be
    * returned.
    */
-
   function _maxSupply() internal view virtual returns (uint256) {
     return type(uint208).max;
   }
