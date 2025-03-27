@@ -849,7 +849,7 @@ contract DelegateBySig is PartialDelegationTest {
     address _delegator = vm.addr(_delegatorPrivateKey);
     stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
     _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
-    _currentTimestamp = bound(_currentTimestamp, 1, type(uint256).max);
+    _currentTimestamp = bound(_currentTimestamp, 1, type(uint48).max);
     vm.warp(_currentTimestamp);
     _deadline = bound(_deadline, 0, _currentTimestamp - 1);
     _mint(_delegator, _delegatorBalance);
@@ -1060,7 +1060,7 @@ contract DelegatePartiallyOnBehalf is PartialDelegationTest {
     address _delegator = vm.addr(_delegatorPrivateKey);
     stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
     _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
-    _currentTimeStamp = bound(_currentTimeStamp, 1, type(uint256).max);
+    _currentTimeStamp = bound(_currentTimeStamp, 1, type(uint48).max);
     vm.warp(_currentTimeStamp);
     _deadline = bound(_deadline, 0, _currentTimeStamp - 1);
 
@@ -1104,7 +1104,7 @@ contract DelegatePartiallyOnBehalf is PartialDelegationTest {
     address _delegator = vm.addr(_delegatorPrivateKey);
     stdstore.target(address(tokenProxy)).sig("nonces(address)").with_key(_delegator).checked_write(_currentNonce);
     _delegatorBalance = bound(_delegatorBalance, 0, type(uint208).max);
-    _deadline = bound(_deadline, 1, type(uint256).max);
+    _deadline = bound(_deadline, 1, type(uint48).max);
     vm.warp(_deadline);
     _deadline = bound(_deadline, 0, block.timestamp - 1);
 
@@ -1493,14 +1493,14 @@ contract Permit is PartialDelegationTest {
 }
 
 contract GetPastVotes is PartialDelegationTest {
-  function testFuzz_ReturnsCorrectVotes(address _actor, uint256 _amount, uint48 _blocksAhead, uint256 _secondMint)
+  function testFuzz_ReturnsCorrectVotes(address _actor, uint256 _amount, uint48 _timestampAhead, uint256 _secondMint)
     public
   {
     vm.assume(_actor != address(0));
     _amount = bound(_amount, 0, type(uint208).max);
     _secondMint = bound(_secondMint, 0, type(uint208).max - _amount);
-    uint256 _blockNo = vm.getBlockNumber();
-    _blocksAhead = uint48(bound(_blocksAhead, 1, type(uint48).max - _blockNo));
+    uint256 _blockTimestamp = vm.getBlockTimestamp();
+    _timestampAhead = uint48(bound(_timestampAhead, _blockTimestamp, type(uint48).max - _blockTimestamp));
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
     vm.stopPrank();
@@ -1508,12 +1508,12 @@ contract GetPastVotes is PartialDelegationTest {
     vm.startPrank(_actor);
     tokenProxy.delegate(_delegations);
     vm.stopPrank();
-    vm.roll(_blockNo + _blocksAhead);
+    vm.warp(_blockTimestamp + _timestampAhead);
     vm.startPrank(_actor);
     // do a second mint that will increase delegatees' votes
     tokenProxy.mint(_secondMint);
     vm.stopPrank();
-    assertCorrectPastVotes(_delegations, _amount, _blockNo);
+    assertCorrectPastVotes(_delegations, _amount, _timestampAhead);
     assertCorrectVotes(_delegations, _amount + _secondMint);
   }
 }
@@ -1522,22 +1522,22 @@ contract GetPastTotalSupply is PartialDelegationTest {
   function testFuzz_ReturnsCorrectPastTotalSupply(
     address _actor,
     uint256 _amount,
-    uint48 _blocksAhead,
+    uint48 _timestampAhead,
     uint256 _secondMint
   ) public {
     vm.assume(_actor != address(0));
     _amount = bound(_amount, 0, type(uint208).max);
     _secondMint = bound(_secondMint, 0, type(uint208).max - _amount);
-    uint256 _blockNo = vm.getBlockNumber();
-    _blocksAhead = uint48(bound(_blocksAhead, 1, type(uint48).max - _blockNo));
+    uint256 _blockTimestamp = vm.getBlockTimestamp();
+    _timestampAhead = uint48(bound(_timestampAhead, _blockTimestamp, type(uint48).max - _blockTimestamp));
     vm.startPrank(_actor);
     tokenProxy.mint(_amount);
-    vm.roll(_blockNo + _blocksAhead);
+    vm.warp(_blockTimestamp + _timestampAhead);
     // do a second mint that will increase total supply
     tokenProxy.mint(_secondMint);
     vm.stopPrank();
     assertEq(tokenProxy.totalSupply(), _amount + _secondMint);
-    assertEq(tokenProxy.getPastTotalSupply(_blockNo), _amount);
+    assertEq(tokenProxy.getPastTotalSupply(_blockTimestamp), _amount);
   }
 }
 
@@ -1582,14 +1582,14 @@ contract GetPastVotableSupply is PartialDelegationTest {
   function testFuzz_ReturnsCorrectPastVotableSupply(
     address _actor,
     uint256 _amount,
-    uint48 _blocksAhead,
+    uint48 _timestampAhead,
     uint256 _secondMint
   ) public {
     vm.assume(_actor != address(0));
     _amount = bound(_amount, 0, type(uint208).max - 1);
     _secondMint = bound(_secondMint, 1, type(uint208).max - _amount);
-    uint256 _blockNo = vm.getBlockNumber();
-    _blocksAhead = uint48(bound(_blocksAhead, 1, type(uint48).max - _blockNo));
+    uint256 _blockTimestamp = vm.getBlockTimestamp();
+    _timestampAhead = uint48(bound(_timestampAhead, _blockTimestamp, type(uint48).max - _blockTimestamp));
 
     // Initial mint
     vm.startPrank(_actor);
@@ -1606,14 +1606,14 @@ contract GetPastVotableSupply is PartialDelegationTest {
     uint256 votableSupply = tokenProxy.getVotableSupply();
 
     // Move blocks ahead and second mint
-    vm.roll(_blockNo + _blocksAhead);
+    vm.warp(_blockTimestamp + _timestampAhead);
     vm.startPrank(_actor);
     tokenProxy.mint(_secondMint);
     vm.stopPrank();
 
     assertEq(
       votableSupply,
-      tokenProxy.getPastVotableSupply(_blockNo),
+      tokenProxy.getPastVotableSupply(_blockTimestamp),
       "Past votable supply should equal the value retrieved earlier"
     );
   }

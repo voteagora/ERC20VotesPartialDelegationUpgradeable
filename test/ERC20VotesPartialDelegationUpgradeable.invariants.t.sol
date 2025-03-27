@@ -66,12 +66,14 @@ contract ERC20VotesPartialDelegationUpgradeableInvariants is Test {
   }
 
   function invariant_SumOfVotesEqualsPastTotalSupply() public {
-    uint256 blockNum = vm.getBlockNumber();
-    vm.roll(blockNum + 1);
+    uint256 blockTimestamp = vm.getBlockTimestamp();
+    vm.warp(blockTimestamp + 1);
     uint256 _sumOfVotes = handler.reduceDelegatees(0, this.accumulateVotes)
       + handler.reduceDelegators(0, this.accumulateRemainders) + handler.reduceNonDelegators(0, this.accumulateBalances)
       + handler.reduceDelegators(0, this.accumulateZeroAddressVotes);
-    assertEq(_sumOfVotes, tokenProxy.getPastTotalSupply(blockNum), "sum of votes does not equal past total supply");
+    assertEq(
+      _sumOfVotes, tokenProxy.getPastTotalSupply(blockTimestamp), "sum of votes does not equal past total supply"
+    );
   }
 
   // Used to see distribution of non-reverting calls
