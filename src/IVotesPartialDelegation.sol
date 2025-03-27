@@ -67,7 +67,7 @@ interface IVotesPartialDelegation is IERC6372 {
   function getVotableSupply() external view returns (uint256);
 
   /**
-   * @dev Return the votable supply at a given block number.
+   * @dev Return the votable supply at a given block timestamp.
    */
   function getPastVotableSupply(uint256 timepoint) external view returns (uint256);
 

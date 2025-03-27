@@ -24,7 +24,8 @@ import {IVotesPartialDelegation} from "src/IVotesPartialDelegation.sol";
  * example, see {ERC20VotesPartialDelegationUpgradeable}.
  *
  * The full history of delegate votes is tracked on-chain so that governance protocols can consider votes as distributed
- * at a particular block number to protect against flash loans and double voting. The opt-in delegate system makes the
+ * at a particular block timestamp to protect against flash loans and double voting. The opt-in delegate system makes
+ * the
  * cost of this history tracking optional.
  *
  * When using this module the derived contract must implement {_getVotingUnits} (for example, make it return
@@ -113,7 +114,7 @@ abstract contract VotesPartialDelegationUpgradeable is
    * checkpoints (and voting), in which case {CLOCK_MODE} should be overridden as well to match.
    */
   function clock() public view virtual returns (uint48) {
-    return Time.blockNumber();
+    return Time.timestamp();
   }
 
   /**
@@ -122,7 +123,7 @@ abstract contract VotesPartialDelegationUpgradeable is
   // solhint-disable-next-line func-name-mixedcase
   function CLOCK_MODE() public view virtual returns (string memory) {
     // Check that the clock was not modified
-    if (clock() != Time.blockNumber()) {
+    if (clock() != Time.timestamp()) {
       revert ERC6372InconsistentClock();
     }
     return "mode=blocknumber&from=default";
@@ -145,7 +146,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
   /**
    * @dev Returns the amount of votes that `account` had at a specific moment in the past. If the `clock()` is
-   * configured to use block numbers, this will return the value at the end of the corresponding block.
+   * configured to use block timestamp, this will return the value at the end of the corresponding block.
    *
    * Requirements:
    *
@@ -162,7 +163,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
   /**
    * @dev Returns the total supply of votes available at a specific moment in the past. If the `clock()` is
-   * configured to use block numbers, this will return the value at the end of the corresponding block.
+   * configured to use block timestamp, this will return the value at the end of the corresponding block.
    *
    * NOTE: This value is the sum of all available votes, which is not necessarily the sum of all delegated votes.
    * Votes that have not been delegated are still part of total supply, even though they would not participate in a
@@ -197,7 +198,7 @@ abstract contract VotesPartialDelegationUpgradeable is
 
   /**
    * @dev Returns the total number of tokens that were delegated for voting at a specific moment in the past.
-   * If the `clock()` is configured to use block numbers, this will return the value at the end of the corresponding
+   * If the `clock()` is configured to use block timestamp, this will return the value at the end of the corresponding
    * block.
    *
    * This value represents the "votable supply" at a given timepoint, which is the sum of all tokens that were
